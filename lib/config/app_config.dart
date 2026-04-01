@@ -61,6 +61,7 @@ class AppStrings {
   static const myRefunds = '/refunds/my-refunds';
 
   static const createPayment = '/payments/create-order';
+  static const initiatePayment = '/payments/initiate';
   static const verifyPayment = '/payments/verify';
 
   static const ratings = '/ratings';

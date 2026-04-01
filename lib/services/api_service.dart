@@ -410,6 +410,19 @@ class ApiService {
     return body['data'];
   });
 
+  /// Initiate online payment — validates order data and returns PayU params
+  /// without creating an order in the DB.
+  static Future<dynamic> initiateOnlinePayment(Map<String, dynamic> orderData) =>
+      _safeRequest(() async {
+    final response = await http.post(
+      Uri.parse('${AppConfig.baseUrl}${AppStrings.initiatePayment}'),
+      headers: _headers,
+      body: jsonEncode(orderData),
+    ).timeout(AppConfig.connectTimeout);
+    final body = await _handleResponse(response);
+    return body['data'];
+  });
+
   // ─── NOTIFICATIONS ──────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getNotifications() => _safeRequest(() async {

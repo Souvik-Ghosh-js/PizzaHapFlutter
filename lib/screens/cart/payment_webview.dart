@@ -8,8 +8,8 @@ import '../../widgets/widgets.dart';
 /// Detects surl/furl redirect to determine payment result.
 class PaymentWebView extends StatefulWidget {
   final Map<String, dynamic> payuParams;
-  final int orderId;
-  const PaymentWebView({super.key, required this.payuParams, required this.orderId});
+  final String txnid;
+  const PaymentWebView({super.key, required this.payuParams, required this.txnid});
 
   @override
   State<PaymentWebView> createState() => _PaymentWebViewState();
@@ -79,21 +79,22 @@ class _PaymentWebViewState extends State<PaymentWebView> {
 
     final uri = Uri.parse(url);
     final status = uri.queryParameters['status'] ?? 'unknown';
-    final orderId = int.tryParse(uri.queryParameters['order_id'] ?? '') ?? widget.orderId;
+    final orderId = int.tryParse(uri.queryParameters['order_id'] ?? '');
 
     if (!mounted) return;
 
     if (status == 'success') {
-      AppToast.success(context, 'Payment successful!');
-      Navigator.pop(context, {'status': 'success', 'order_id': orderId});
+      Navigator.pop(context, {
+        'status': 'success',
+        'order_id': orderId,
+        'order_number': uri.queryParameters['order_number'],
+        'total': double.tryParse(uri.queryParameters['total'] ?? '0'),
+        'coins_redeemed': int.tryParse(uri.queryParameters['coins_redeemed'] ?? '0'),
+      });
     } else {
-      // Backend webhook already cancels the order on failure,
-      // but call cancel as a safety net in case webhook didn't fire
-      try {
-        await ApiService.cancelOrder(orderId, reason: 'Payment failed');
-      } catch (_) {}
-      AppToast.error(context, 'Payment failed. Order has been cancelled.');
-      Navigator.pop(context, {'status': 'failed', 'order_id': orderId});
+      // No order was created yet, so no need to call cancelOrder.
+      // Just return to checkout.
+      Navigator.pop(context, {'status': 'failed', 'txnid': widget.txnid});
     }
   }
 
@@ -127,24 +128,19 @@ class _PaymentWebViewState extends State<PaymentWebView> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Cancel Payment?'),
+        title: const Text('Exit Payment?'),
         content: const Text(
-            'If you cancel, your order will be cancelled and you will need to place a new order.'),
+            'Your order has not been placed yet. If you exit now, your payment will not be completed.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx), child: const Text('Stay')),
           TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              // Cancel the order on the backend
-              try {
-                await ApiService.cancelOrder(widget.orderId, reason: 'Payment cancelled by user');
-              } catch (_) {}
+            onPressed: () {
+              Navigator.pop(ctx); // close dialog
               if (!mounted) return;
-              Navigator.pop(
-                  context, {'status': 'cancelled', 'order_id': widget.orderId});
+              Navigator.pop(context, {'status': 'cancelled', 'txnid': widget.txnid});
             },
-            child: const Text('Cancel Order', style: TextStyle(color: Colors.red)),
+            child: const Text('Exit', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

@@ -129,20 +129,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       if (coinsToSend > 0) 'coins_to_redeem': coinsToSend,
     };
 
-    final result = await orderProvider.placeOrder(orderData);
-
-    if (result == null) {
-      AppLoader.hide();
-      setState(() => _placingOrder = false);
-      if (!mounted) return;
-      AppToast.error(context, orderProvider.error ?? 'Failed to place order');
-      return;
-    }
-
     if (isOnline) {
+      // ── Online payment: initiate payment first, order created only after success ──
       try {
-        final dynamic payResult =
-            await ApiService.createPaymentOrder(result['order_id'], 'payu');
+        final dynamic payResult = await ApiService.initiateOnlinePayment(orderData);
 
         AppLoader.hide();
         setState(() => _placingOrder = false);
@@ -150,14 +140,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
         if (payResult is Map && payResult.containsKey('payu_params')) {
           final params = Map<String, dynamic>.from(payResult['payu_params']);
+          final txnid = payResult['txnid'] as String;
 
-          // Open PayU in-app WebView
           final paymentResult = await Navigator.push<Map<String, dynamic>>(
             context,
             MaterialPageRoute(
               builder: (_) => PaymentWebView(
                 payuParams: params,
-                orderId: result['order_id'],
+                txnid: txnid,
               ),
             ),
           );
@@ -173,34 +163,42 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               '/order-confirm',
               (r) => r.settings.name == '/home',
               arguments: {
-                'order_id': result['order_id'],
-                'order_number': result['order_number'],
-                'total': result['total_amount'],
-                'coins_redeemed': result['coins_redeemed'] ?? 0,
+                'order_id': paymentResult['order_id'],
+                'order_number': paymentResult['order_number'],
+                'total': paymentResult['total'],
+                'coins_redeemed': paymentResult['coins_redeemed'] ?? 0,
               },
             );
           } else {
-            // Order was cancelled by the payment webview or webhook — refresh coins and stay on checkout
+            // Payment failed or cancelled — no order was created, just stay on checkout
             context.read<AuthProvider>().refreshUser();
-            AppToast.error(
-                context, 'Payment failed. Your order has been cancelled. You can try again.');
+            _showPaymentStatus(
+              isCancelled: paymentResult?['status'] == 'cancelled',
+            );
           }
           return;
         }
 
-        AppToast.error(context,
-            'Payment gateway error. Please find the order in My Orders.');
+        AppToast.error(context, 'Payment gateway error. Please try again.');
       } catch (e) {
         AppLoader.hide();
         setState(() => _placingOrder = false);
         if (!mounted) return;
-        AppToast.error(context, 'Payment configuration error: $e');
+        AppToast.error(context, 'Payment error: $e');
       }
     } else {
-      // Cash on Delivery flow
+      // ── Cash on Delivery: place order directly ──
+      final result = await orderProvider.placeOrder(orderData);
+
       AppLoader.hide();
       setState(() => _placingOrder = false);
       if (!mounted) return;
+
+      if (result == null) {
+        AppToast.error(context, orderProvider.error ?? 'Failed to place order');
+        return;
+      }
+
       AppToast.success(context, 'Order placed successfully!');
       cart.clear();
       context.read<AuthProvider>().refreshUser();
@@ -216,6 +214,33 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         },
       );
     }
+  }
+
+  void _showPaymentStatus({required bool isCancelled}) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(isCancelled ? 'Payment Cancelled' : 'Payment Failed'),
+        content: Text(isCancelled
+            ? 'You cancelled the payment. No order has been placed. Would you like to try again or stay on checkout?'
+            : 'Something went wrong with your payment. No order was placed. You can try again or check your payment details.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Back to Cart', style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _placeOrder(); // Simply re-trigger the placement flow
+            },
+            style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(AppColors.primary)),
+            child: const Text('Try Again', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
   }
 
   void _toggleCoins(bool val, CartProvider cart, int coinBalance) {
