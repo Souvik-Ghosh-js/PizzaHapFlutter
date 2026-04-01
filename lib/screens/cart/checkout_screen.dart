@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../providers/providers.dart';
@@ -6,7 +5,7 @@ import '../../config/app_config.dart';
 import '../../widgets/widgets.dart';
 import '../../widgets/app_loader.dart';
 import '../../services/api_service.dart';
-import 'package:url_launcher/url_launcher.dart';
+import 'payment_webview.dart';
 
 class CheckoutScreen extends StatefulWidget {
   const CheckoutScreen({super.key});
@@ -142,90 +141,56 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       try {
         final dynamic payResult =
             await ApiService.createPaymentOrder(result['order_id'], 'payu');
-        debugPrint('[PAYMENT_DEBUG]: PayResult type: ${payResult.runtimeType}');
-        debugPrint('[PAYMENT_DEBUG]: result: $payResult');
-
-        String? payUrl;
-        if (payResult is String) {
-          payUrl = payResult;
-        } else if (payResult is Map) {
-          payUrl = payResult['payment_url'] ??
-              payResult['url'] ??
-              payResult['redirect_url'] ??
-              payResult['payment_link'] ??
-              payResult['paymentLink'] ??
-              payResult['checkout_url'] ??
-              payResult['checkoutUrl'] ??
-              payResult['pay_url'] ??
-              payResult['link'] ??
-              payResult['form_url'];
-
-          // Fallback for PayU raw parameters
-          if (payUrl == null && payResult.containsKey('payu_params')) {
-            debugPrint(
-                '[PAYMENT_DEBUG] payu_params detected. Constructing auto-submit form...');
-            final params = Map<String, dynamic>.from(payResult['payu_params']);
-
-            // Determine endpoint (test vs production)
-            final isTest = params['key'] == 'your_payu_key' ||
-                (params['key'] ?? '').toString().toLowerCase().contains('test');
-            final endpoint = isTest
-                ? 'https://test.payu.in/_payment'
-                : 'https://secure.payu.in/_payment';
-
-            // Build self-submitting HTML form
-            String formHtml =
-                '<html><body onload="document.f.submit();"><form id="f" name="f" method="post" action="$endpoint">';
-            params.forEach((k, v) => formHtml +=
-                '<input type="hidden" name="${k.toString()}" value="${v.toString()}">');
-            formHtml += '</form></body></html>';
-
-            // Encode as Data URI for url_launcher
-            payUrl =
-                'data:text/html;base64,${base64Encode(utf8.encode(formHtml))}';
-          }
-        }
 
         AppLoader.hide();
         setState(() => _placingOrder = false);
         if (!mounted) return;
 
-        if (payUrl != null && payUrl.isNotEmpty) {
-          try {
-            debugPrint('[PAYMENT_DEBUG] Launching Payment interface...');
-            final Uri uri = Uri.parse(payUrl);
-            final launched =
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
+        if (payResult is Map && payResult.containsKey('payu_params')) {
+          final params = Map<String, dynamic>.from(payResult['payu_params']);
 
-            if (launched) {
-              debugPrint('[PAYMENT_DEBUG] Launcher success!');
-            } else {
-              debugPrint('[PAYMENT_DEBUG] Launcher report FALSE');
-            }
-          } catch (e) {
-            debugPrint('[PAYMENT_DEBUG] launchUrl error: $e');
-            if (mounted) {
-              AppToast.error(context, 'Could not open browser for payment: $e');
-            }
-          }
+          // Open PayU in-app WebView
+          final paymentResult = await Navigator.push<Map<String, dynamic>>(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PaymentWebView(
+                payuParams: params,
+                orderId: result['order_id'],
+              ),
+            ),
+          );
 
           if (!mounted) return;
-          // Redirect to order details instead of confirm screen, as payment is pending
-          AppToast.success(context, 'Order placed! Please complete payment.');
           cart.clear();
           context.read<AuthProvider>().refreshUser();
-          Navigator.pushNamedAndRemoveUntil(
-            context,
-            '/order-detail',
-            (r) => false,
-            arguments: result['order_id'],
-          );
+
+          if (paymentResult != null && paymentResult['status'] == 'success') {
+            AppToast.success(context, 'Payment successful! Order confirmed.');
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              '/order-confirm',
+              (r) => r.settings.name == '/home',
+              arguments: {
+                'order_id': result['order_id'],
+                'order_number': result['order_number'],
+                'total': result['total_amount'],
+                'coins_redeemed': result['coins_redeemed'] ?? 0,
+              },
+            );
+          } else {
+            AppToast.error(context, 'Payment incomplete. You can retry from My Orders.');
+            Navigator.pushNamedAndRemoveUntil(
+              context,
+              '/order-detail',
+              (r) => false,
+              arguments: result['order_id'],
+            );
+          }
           return;
-        } else {
-          debugPrint('[PAYMENT_DEBUG] payUrl was null or empty');
         }
+
         AppToast.error(context,
-            'Payment gateway returned no URL. Please check My Orders.');
+            'Payment gateway error. Please check My Orders.');
       } catch (e) {
         AppLoader.hide();
         setState(() => _placingOrder = false);
