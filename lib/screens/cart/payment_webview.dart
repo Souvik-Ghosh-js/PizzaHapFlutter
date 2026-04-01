@@ -115,13 +115,16 @@ class _PaymentWebViewState extends State<PaymentWebView> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel Payment?'),
-        content: const Text('Your order has been placed. You can complete payment later from My Orders.'),
+        content: const Text(
+            'Your order has been initiated and is currently in "Pending Payment" status. You can complete the payment later from "My Orders".'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Stay')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx), child: const Text('Stay')),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              Navigator.pop(context, {'status': 'cancelled', 'order_id': widget.orderId});
+              Navigator.pop(
+                  context, {'status': 'cancelled', 'order_id': widget.orderId});
             },
             child: const Text('Leave', style: TextStyle(color: Colors.red)),
           ),

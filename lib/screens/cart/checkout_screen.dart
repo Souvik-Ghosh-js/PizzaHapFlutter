@@ -80,7 +80,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
 
     setState(() => _placingOrder = true);
-    AppLoader.show(context, message: 'Placing your order...');
+    final isOnline = _paymentMethod == 'online';
+    AppLoader.show(context,
+        message: isOnline ? 'Initializing payment...' : 'Placing your order...');
 
     // Auto-save address to profile so it persists for next order
     final user = context.read<AuthProvider>().user;
@@ -137,7 +139,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       return;
     }
 
-    if (_paymentMethod == 'online') {
+    if (isOnline) {
       try {
         final dynamic payResult =
             await ApiService.createPaymentOrder(result['order_id'], 'payu');
@@ -161,6 +163,9 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           );
 
           if (!mounted) return;
+          
+          // The order is already in the DB (pending payment).
+          // We clear the cart now to prevent double-ordering if they retry from My Orders.
           cart.clear();
           context.read<AuthProvider>().refreshUser();
 
@@ -178,7 +183,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               },
             );
           } else {
-            AppToast.error(context, 'Payment incomplete. You can retry from My Orders.');
+            AppToast.error(
+                context, 'Payment incomplete. You can retry from My Orders.');
             Navigator.pushNamedAndRemoveUntil(
               context,
               '/order-detail',
@@ -190,12 +196,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         }
 
         AppToast.error(context,
-            'Payment gateway error. Please check My Orders.');
+            'Payment gateway error. Please find the order in My Orders.');
       } catch (e) {
         AppLoader.hide();
         setState(() => _placingOrder = false);
         if (!mounted) return;
-        AppToast.error(context, 'Payment error: $e');
+        AppToast.error(context, 'Payment configuration error: $e');
       }
     } else {
       // Cash on Delivery flow

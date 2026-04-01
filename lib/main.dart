@@ -52,15 +52,14 @@ class PizzaHapApp extends StatelessWidget {
           ChangeNotifierProvider(create: (_) => CoinsProvider()),
           ChangeNotifierProvider(create: (_) => NotificationProvider()),
         ],
-        child: WebCorsBanner(
-          child: MaterialApp(
-            title: 'PizzaHap',
-            theme: AppTheme.theme,
-            debugShowCheckedModeBanner: false,
-            navigatorKey: navigatorKey,
-            initialRoute: '/splash',
-            onGenerateRoute: _generateRoute,
-          ),
+        child: MaterialApp(
+          title: 'PizzaHap',
+          theme: AppTheme.theme,
+          debugShowCheckedModeBanner: false,
+          navigatorKey: navigatorKey,
+          initialRoute: '/splash',
+          onGenerateRoute: _generateRoute,
+          builder: (context, child) => WebCorsBanner(child: child!),
         ),
       );
 
