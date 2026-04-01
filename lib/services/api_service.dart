@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
-import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
 import '../config/app_config.dart';
 import '../models/models.dart';
@@ -50,27 +50,29 @@ Future<T> _safeRequest<T>(Future<T> Function() fn) async {
 }
 
 class ApiService {
-  static const _storage = FlutterSecureStorage();
+  static SharedPreferences? _prefs;
   static String? _accessToken;
   static String? _refreshToken;
 
   static Future<void> init() async {
-    _accessToken = await _storage.read(key: 'access_token');
-    _refreshToken = await _storage.read(key: 'refresh_token');
+    _prefs = await SharedPreferences.getInstance();
+    _accessToken = _prefs?.getString('access_token');
+    _refreshToken = _prefs?.getString('refresh_token');
     _log('Init - Logged in: ${_accessToken != null}');
   }
 
   static Future<void> saveTokens(String access, String refresh) async {
     _accessToken = access;
     _refreshToken = refresh;
-    await _storage.write(key: 'access_token', value: access);
-    await _storage.write(key: 'refresh_token', value: refresh);
+    await _prefs?.setString('access_token', access);
+    await _prefs?.setString('refresh_token', refresh);
   }
 
   static Future<void> clearTokens() async {
     _accessToken = null;
     _refreshToken = null;
-    await _storage.deleteAll();
+    await _prefs?.remove('access_token');
+    await _prefs?.remove('refresh_token');
   }
 
   static bool get isLoggedIn => _accessToken != null;
