@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
+import '../../services/api_service.dart';
 import '../../widgets/widgets.dart';
 
 /// Opens PayU payment page in an in-app WebView.
@@ -59,6 +61,12 @@ class _PaymentWebViewState extends State<PaymentWebView> {
             _handlePaymentResult(request.url);
             return NavigationDecision.prevent;
           }
+          // Handle non-HTTP schemes (upi://, phonepe://, gpay://, intent://, etc.)
+          final uri = Uri.tryParse(request.url);
+          if (uri != null && !['http', 'https', 'about', 'data'].contains(uri.scheme)) {
+            launchUrl(uri, mode: LaunchMode.externalApplication);
+            return NavigationDecision.prevent;
+          }
           return NavigationDecision.navigate;
         },
       ))
@@ -79,7 +87,12 @@ class _PaymentWebViewState extends State<PaymentWebView> {
       AppToast.success(context, 'Payment successful!');
       Navigator.pop(context, {'status': 'success', 'order_id': orderId});
     } else {
-      AppToast.error(context, 'Payment failed or was cancelled.');
+      // Backend webhook already cancels the order on failure,
+      // but call cancel as a safety net in case webhook didn't fire
+      try {
+        await ApiService.cancelOrder(orderId, reason: 'Payment failed');
+      } catch (_) {}
+      AppToast.error(context, 'Payment failed. Order has been cancelled.');
       Navigator.pop(context, {'status': 'failed', 'order_id': orderId});
     }
   }
@@ -116,17 +129,22 @@ class _PaymentWebViewState extends State<PaymentWebView> {
       builder: (ctx) => AlertDialog(
         title: const Text('Cancel Payment?'),
         content: const Text(
-            'Your order has been initiated and is currently in "Pending Payment" status. You can complete the payment later from "My Orders".'),
+            'If you cancel, your order will be cancelled and you will need to place a new order.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx), child: const Text('Stay')),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
+              // Cancel the order on the backend
+              try {
+                await ApiService.cancelOrder(widget.orderId, reason: 'Payment cancelled by user');
+              } catch (_) {}
+              if (!mounted) return;
               Navigator.pop(
                   context, {'status': 'cancelled', 'order_id': widget.orderId});
             },
-            child: const Text('Leave', style: TextStyle(color: Colors.red)),
+            child: const Text('Cancel Order', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),

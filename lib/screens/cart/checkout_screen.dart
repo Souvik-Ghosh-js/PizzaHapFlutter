@@ -163,13 +163,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           );
 
           if (!mounted) return;
-          
-          // The order is already in the DB (pending payment).
-          // We clear the cart now to prevent double-ordering if they retry from My Orders.
-          cart.clear();
-          context.read<AuthProvider>().refreshUser();
 
           if (paymentResult != null && paymentResult['status'] == 'success') {
+            cart.clear();
+            context.read<AuthProvider>().refreshUser();
             AppToast.success(context, 'Payment successful! Order confirmed.');
             Navigator.pushNamedAndRemoveUntil(
               context,
@@ -183,14 +180,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               },
             );
           } else {
+            // Order was cancelled by the payment webview or webhook — refresh coins and stay on checkout
+            context.read<AuthProvider>().refreshUser();
             AppToast.error(
-                context, 'Payment incomplete. You can retry from My Orders.');
-            Navigator.pushNamedAndRemoveUntil(
-              context,
-              '/order-detail',
-              (r) => false,
-              arguments: result['order_id'],
-            );
+                context, 'Payment failed. Your order has been cancelled. You can try again.');
           }
           return;
         }
