@@ -14,7 +14,7 @@ class AuthProvider extends ChangeNotifier {
   User? get user => _user;
   bool get loading => _loading;
   String? get error => _error;
-  bool get isLoggedIn => _user != null && ApiService.isLoggedIn;
+  bool get isLoggedIn => ApiService.isLoggedIn;
   bool get sessionExpired => _sessionExpired;
 
   Future<void> init() async {
@@ -23,8 +23,23 @@ class AuthProvider extends ChangeNotifier {
       try {
         _user = await ApiService.getMe();
         notifyListeners();
+      } on ApiException catch (e) {
+        if (e.message == 'token_refreshed') {
+          // Token was refreshed, retry getMe once
+          try {
+            _user = await ApiService.getMe();
+            notifyListeners();
+          } catch (_) {
+            // If it fails again, keep tokens (might be network issue)
+            // User will stay "logged in" but with null user object,
+            // which refreshUser will fix later.
+          }
+        } else if (e.statusCode == 401) {
+          // Only clear if it's a terminal auth failure
+          await ApiService.clearTokens();
+        }
       } catch (_) {
-        await ApiService.clearTokens();
+        // Network or other transient error: keep tokens, let them try later
       }
     }
   }
