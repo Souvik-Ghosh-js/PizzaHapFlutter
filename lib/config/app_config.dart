@@ -1,6 +1,8 @@
+import 'package:flutter/foundation.dart';
+
 class AppConfig {
-  static const String baseUrl = 'https://api.gobt.in/api';
-  static const String imageBaseUrl = 'https://api.gobt.in';  // for /uploads/... paths
+  static const String baseUrl = kIsWeb ? 'http://localhost:3000/api' : 'http://10.0.2.2:3000/api';
+  static const String imageBaseUrl = kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000';
   static const String appName = 'PizzaHap';
   static const Duration connectTimeout = Duration(seconds: 30);
   static const Duration receiveTimeout = Duration(seconds: 30);
