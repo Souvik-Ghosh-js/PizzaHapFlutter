@@ -45,7 +45,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
 
   Future<void> _load() async {
     try {
-      final p = await ApiService.getProduct(widget.productId);
+      final p = await ApiService.getProduct(widget.productId, locationId: context.read<MenuProvider>().selectedLocationId);
       setState(() {
         _product = p;
         _selectedSize = p.sizes.isNotEmpty ? p.sizes.first : null;
@@ -59,15 +59,15 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
 
   double get _totalPrice {
     if (_product == null || _selectedSize == null) return 0;
-    double price = _selectedSize!.price;
-    if (_selectedCrust != null) price += _selectedCrust!.extraPrice;
+    double price = _selectedSize!.effectivePrice;
+    if (_selectedCrust != null) price += _selectedCrust!.effectiveExtraPrice;
     for (final id in _selectedToppingIds) {
       final t = _product!.toppings.firstWhere(
         (t) => t.id == id,
         orElse: () =>
-            Topping(id: 0, name: '', price: 0, isVeg: true, isAvailable: true),
+            Topping(id: 0, name: '', price: 0, effectivePrice: 0, isVeg: true, isAvailable: true),
       );
-      price += t.price;
+      price += t.effectivePrice;
     }
     return price * _quantity;
   }
@@ -301,7 +301,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                                                     AppColors.textPrimary),
                                           )),
                                       const SizedBox(height: 3),
-                                      Text('₹${size.price.toStringAsFixed(0)}',
+                                      Text('₹${size.effectivePrice.toStringAsFixed(0)}',
                                           style: TextStyle(
                                             fontWeight: FontWeight.w800,
                                             fontSize: 17,
@@ -373,10 +373,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                                               fontWeight: FontWeight.w700,
                                               fontSize: 13,
                                             )),
-                                        if (c.extraPrice > 0) ...[
+                                        if (c.effectiveExtraPrice > 0) ...[
                                           const SizedBox(width: 4),
                                           Text(
-                                              '+₹${c.extraPrice.toStringAsFixed(0)}',
+                                              '+₹${c.effectiveExtraPrice.toStringAsFixed(0)}',
                                               style: TextStyle(
                                                   color: sel
                                                       ? Colors.white70
@@ -453,7 +453,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                                                       AppColors.textPrimary),
                                             )),
                                         const SizedBox(width: 4),
-                                        Text('+₹${t.price.toStringAsFixed(0)}',
+                                        Text('+₹${t.effectivePrice.toStringAsFixed(0)}',
                                             style: TextStyle(
                                                 fontSize: 11,
                                                 color: Colors.grey.shade500)),

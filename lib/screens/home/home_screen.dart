@@ -6,6 +6,7 @@ import '../../providers/providers.dart';
 import '../../config/app_config.dart';
 import '../../widgets/widgets.dart';
 import '../../models/models.dart';
+import '../../services/api_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -437,6 +438,26 @@ class _HomeContent extends StatelessWidget {
 
 // ─── PROMO BANNER SLIDER ─────────────────────────────────────────
 
+// ── Icon name to IconData mapping ────────────────────────────────
+const _iconMap = <String, IconData>{
+  'local_shipping': Icons.local_shipping_rounded,
+  'auto_awesome': Icons.auto_awesome_rounded,
+  'eco': Icons.eco_rounded,
+  'local_offer': Icons.local_offer_rounded,
+  'celebration': Icons.celebration_rounded,
+  'star': Icons.star_rounded,
+  'restaurant': Icons.restaurant_rounded,
+  'loyalty': Icons.loyalty_rounded,
+  'new_releases': Icons.new_releases_rounded,
+  'whatshot': Icons.whatshot_rounded,
+};
+
+Color _hexToColor(String hex) {
+  hex = hex.replaceAll('#', '');
+  if (hex.length == 6) hex = 'FF$hex';
+  return Color(int.parse(hex, radix: 16));
+}
+
 class _PromoBannerSlider extends StatefulWidget {
   const _PromoBannerSlider();
   @override
@@ -447,39 +468,34 @@ class _PromoBannerSliderState extends State<_PromoBannerSlider> {
   final _pageCtrl = PageController(viewportFraction: 0.92);
   int _currentPage = 0;
   Timer? _timer;
-
-  static const _banners = [
-    _BannerData(
-      gradient: [Color(0xFF991515), Color(AppColors.accent)],
-      icon: Icons.local_shipping_rounded,
-      badge: 'Special Offer',
-      title: 'Free delivery on\norders above ₹300!',
-    ),
-    _BannerData(
-      gradient: [Color(0xFF1A1A8C), Color(0xFF4F6DEA)],
-      icon: Icons.auto_awesome_rounded,
-      badge: 'New Arrivals',
-      title: 'Try our new\nsignature pizzas!',
-    ),
-    _BannerData(
-      gradient: [Color(0xFF166534), Color(0xFF16A34A)],
-      icon: Icons.eco_rounded,
-      badge: 'Healthy Choice',
-      title: 'Fresh veg pizzas\nwith extra toppings!',
-    ),
-  ];
+  List<PromoBanner> _banners = [];
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 4), (_) {
-      if (!mounted) return;
-      _pageCtrl.animateToPage(
-        (_currentPage + 1) % _banners.length,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-      );
-    });
+    _loadBanners();
+  }
+
+  Future<void> _loadBanners() async {
+    try {
+      final banners = await ApiService.getBanners();
+      if (mounted) {
+        setState(() { _banners = banners; _loading = false; });
+        if (banners.length > 1) {
+          _timer = Timer.periodic(const Duration(seconds: 4), (_) {
+            if (!mounted || _banners.isEmpty) return;
+            _pageCtrl.animateToPage(
+              (_currentPage + 1) % _banners.length,
+              duration: const Duration(milliseconds: 500),
+              curve: Curves.easeInOut,
+            );
+          });
+        }
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -491,6 +507,25 @@ class _PromoBannerSliderState extends State<_PromoBannerSlider> {
 
   @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return SizedBox(
+        height: 145,
+        child: Shimmer.fromColors(
+          baseColor: Colors.grey.shade200,
+          highlightColor: Colors.grey.shade100,
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (_banners.isEmpty) return const SizedBox.shrink();
+
     return Column(
       children: [
         SizedBox(
@@ -499,7 +534,7 @@ class _PromoBannerSliderState extends State<_PromoBannerSlider> {
             controller: _pageCtrl,
             itemCount: _banners.length,
             onPageChanged: (i) => setState(() => _currentPage = i),
-            itemBuilder: (ctx, i) => _BannerCard(data: _banners[i]),
+            itemBuilder: (ctx, i) => _BannerCard(banner: _banners[i]),
           ),
         ),
         const SizedBox(height: 10),
@@ -526,34 +561,29 @@ class _PromoBannerSliderState extends State<_PromoBannerSlider> {
   }
 }
 
-class _BannerData {
-  final List<Color> gradient;
-  final IconData icon;
-  final String badge, title;
-  const _BannerData(
-      {required this.gradient,
-      required this.icon,
-      required this.badge,
-      required this.title});
-}
-
 class _BannerCard extends StatelessWidget {
-  final _BannerData data;
-  const _BannerCard({required this.data});
+  final PromoBanner banner;
+  const _BannerCard({required this.banner});
 
   @override
   Widget build(BuildContext context) {
+    final gradientColors = [
+      _hexToColor(banner.gradientStart),
+      _hexToColor(banner.gradientEnd),
+    ];
+    final icon = _iconMap[banner.iconName] ?? Icons.local_offer_rounded;
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(20),
         gradient: LinearGradient(
-            colors: data.gradient,
+            colors: gradientColors,
             begin: Alignment.topLeft,
             end: Alignment.bottomRight),
         boxShadow: [
           BoxShadow(
-              color: data.gradient.first.withValues(alpha: 0.35),
+              color: gradientColors.first.withValues(alpha: 0.35),
               blurRadius: 14,
               offset: const Offset(0, 6)),
         ],
@@ -587,7 +617,7 @@ class _BannerCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Text(
-                    data.badge,
+                    banner.badgeText,
                     style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
@@ -596,7 +626,7 @@ class _BannerCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  data.title,
+                  banner.titleText,
                   style: const TextStyle(
                       color: Colors.white,
                       fontSize: 17,
@@ -610,7 +640,7 @@ class _BannerCard extends StatelessWidget {
             right: 20,
             top: 0,
             bottom: 0,
-            child: Icon(data.icon,
+            child: Icon(icon,
                 color: Colors.white.withValues(alpha: 0.9), size: 72),
           ),
         ],

@@ -38,6 +38,8 @@ class AppStrings {
 
   static const locations = '/locations';
   static const nearestLocation = '/locations/nearest';
+  static const checkGeofence = '/locations/check-geofence';
+  static const banners = '/menu/banners';
 
   static const categories = '/menu/categories';
   static const products = '/menu/products';

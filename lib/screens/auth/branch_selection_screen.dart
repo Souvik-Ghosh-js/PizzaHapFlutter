@@ -25,7 +25,33 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
   @override
   void initState() {
     super.initState();
-    // Load plain list without GPS on start  GPS only on user tap
+    // Check geofence silently on load
+    _autoDetectLocation();
+  }
+
+  Future<void> _autoDetectLocation() async {
+    setState(() {
+      _loading = true;
+      _locationUsed = false;
+    });
+    try {
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.whileInUse || perm == LocationPermission.always) {
+        final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
+        final geofenceData = await ApiService.checkGeofence(lat: pos.latitude, lng: pos.longitude);
+        if (geofenceData['inside'] == true && geofenceData['location'] != null) {
+          final locData = geofenceData['location'];
+          final loc = Location.fromJson(locData);
+          if (mounted) {
+            context.read<CartProvider>().setLocation(loc.id, loc.name);
+            context.read<MenuProvider>().setSelectedLocation(loc.id);
+            Navigator.pushReplacementNamed(context, '/home');
+            return;
+          }
+        }
+      }
+    } catch (_) {}
+    // Fallback to normal loading if not inside geofence or no permission
     _loadLocations();
   }
 

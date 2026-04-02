@@ -217,6 +217,30 @@ class ApiService {
     return Location.fromJson(body['data']);
   });
 
+  // ─── GEOFENCE ──────────────────────────────────────────────────────
+
+  static Future<Map<String, dynamic>> checkGeofence({required double lat, required double lng}) => _safeRequest(() async {
+    final url = '${AppConfig.baseUrl}${AppStrings.checkGeofence}?latitude=$lat&longitude=$lng';
+    final response = await http.get(Uri.parse(url), headers: _headers).timeout(AppConfig.connectTimeout);
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200 && body['data'] != null) {
+      return body['data'] as Map<String, dynamic>;
+    }
+    throw ApiException(body['message'] ?? 'Geofence check failed');
+  });
+
+  // ─── BANNERS ──────────────────────────────────────────────────────
+
+  static Future<List<PromoBanner>> getBanners() => _safeRequest(() async {
+    final url = '${AppConfig.baseUrl}${AppStrings.banners}';
+    final response = await http.get(Uri.parse(url), headers: _headers).timeout(AppConfig.connectTimeout);
+    final body = jsonDecode(response.body);
+    if (response.statusCode == 200 && body['data'] != null) {
+      return (body['data'] as List).map((b) => PromoBanner.fromJson(b)).toList();
+    }
+    throw ApiException(body['message'] ?? 'Failed to load banners');
+  });
+
   // ─── MENU ──────────────────────────────────────────────────────────
 
   static Future<List<Category>> getCategories() => _safeRequest(() async {
@@ -255,9 +279,11 @@ class ApiService {
     return (body['data'] as List).map((p) => Product.fromJson(p)).toList();
   });
 
-  static Future<Product> getProduct(int id) => _safeRequest(() async {
+  static Future<Product> getProduct(int id, {int? locationId}) => _safeRequest(() async {
+    var url = '${AppConfig.baseUrl}${AppStrings.products}/$id';
+    if (locationId != null) url += '?location_id=$locationId';
     final response = await http.get(
-      Uri.parse('${AppConfig.baseUrl}${AppStrings.products}/$id'),
+      Uri.parse(url),
       headers: _headers,
     ).timeout(AppConfig.connectTimeout);
     final body = await _handleResponse(response);

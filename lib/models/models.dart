@@ -168,6 +168,38 @@ class Location {
       );
 }
 
+// ─── BANNER MODEL ─────────────────────────────────────────────────
+
+class PromoBanner {
+  final int id;
+  final String badgeText;
+  final String titleText;
+  final String gradientStart;
+  final String gradientEnd;
+  final String iconName;
+  final int sortOrder;
+
+  PromoBanner({
+    required this.id,
+    required this.badgeText,
+    required this.titleText,
+    required this.gradientStart,
+    required this.gradientEnd,
+    required this.iconName,
+    required this.sortOrder,
+  });
+
+  factory PromoBanner.fromJson(Map<String, dynamic> json) => PromoBanner(
+        id: json['id'],
+        badgeText: json['badge_text'] ?? '',
+        titleText: json['title_text'] ?? '',
+        gradientStart: json['gradient_start'] ?? '#991515',
+        gradientEnd: json['gradient_end'] ?? '#FF6B35',
+        iconName: json['icon_name'] ?? 'local_offer',
+        sortOrder: json['sort_order'] ?? 0,
+      );
+}
+
 // ─── MENU MODELS ──────────────────────────────────────────────────
 
 class Category {
@@ -197,18 +229,21 @@ class ProductSize {
   final int id;
   final String sizeName;
   final double price;
+  final double effectivePrice;
   final bool isAvailable;
 
   ProductSize(
       {required this.id,
       required this.sizeName,
       required this.price,
+      required this.effectivePrice,
       required this.isAvailable});
 
   factory ProductSize.fromJson(Map<String, dynamic> json) => ProductSize(
         id: json['id'],
         sizeName: json['size_name'] ?? '',
         price: _parseDouble(json['price']),
+        effectivePrice: _parseDouble(json['effective_price'] ?? json['price']),
         isAvailable: json['is_available'] == 1 || json['is_available'] == true,
       );
 }
@@ -217,18 +252,21 @@ class CrustType {
   final int id;
   final String name;
   final double extraPrice;
+  final double effectiveExtraPrice;
   final bool isAvailable;
 
   CrustType(
       {required this.id,
       required this.name,
       required this.extraPrice,
+      required this.effectiveExtraPrice,
       required this.isAvailable});
 
   factory CrustType.fromJson(Map<String, dynamic> json) => CrustType(
         id: json['id'],
         name: json['name'] ?? '',
         extraPrice: _parseDouble(json['extra_price']),
+        effectiveExtraPrice: _parseDouble(json['effective_extra_price'] ?? json['extra_price']),
         isAvailable: json['is_available'] == 1 || json['is_available'] == true,
       );
 }
@@ -237,6 +275,7 @@ class Topping {
   final int id;
   final String name;
   final double price;
+  final double effectivePrice;
   final bool isVeg;
   final bool isAvailable;
 
@@ -244,6 +283,7 @@ class Topping {
       {required this.id,
       required this.name,
       required this.price,
+      required this.effectivePrice,
       required this.isVeg,
       required this.isAvailable});
 
@@ -251,6 +291,7 @@ class Topping {
         id: json['id'],
         name: json['name'] ?? '',
         price: _parseDouble(json['price']),
+        effectivePrice: _parseDouble(json['effective_price'] ?? json['price']),
         isVeg: json['is_veg'] == 1 || json['is_veg'] == true,
         isAvailable: json['is_available'] == 1 || json['is_available'] == true,
       );
@@ -347,10 +388,10 @@ class CartItem {
   });
 
   double get unitPrice {
-    double price = size.price;
-    if (crust != null) price += crust!.extraPrice;
+    double price = size.effectivePrice;
+    if (crust != null) price += crust!.effectiveExtraPrice;
     for (final t in selectedToppings) {
-      price += t.price;
+      price += t.effectivePrice;
     }
     return price;
   }
