@@ -54,25 +54,35 @@ class ApiService {
   static String? _accessToken;
   static String? _refreshToken;
 
+  // For locking simultaneous refresh calls
+  static Future<bool>? _refreshFuture;
+
   static Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
+    _prefs ??= await SharedPreferences.getInstance();
     _accessToken = _prefs?.getString('access_token');
     _refreshToken = _prefs?.getString('refresh_token');
     _log('Init - Logged in: ${_accessToken != null}');
+    if (_accessToken != null) {
+        _log('Auth Header: Bearer ${_accessToken!.substring(0, 5)}...');
+    }
   }
 
   static Future<void> saveTokens(String access, String refresh) async {
     _accessToken = access;
     _refreshToken = refresh;
+    _prefs ??= await SharedPreferences.getInstance();
     await _prefs?.setString('access_token', access);
     await _prefs?.setString('refresh_token', refresh);
+    _log('Tokens saved successfully');
   }
 
   static Future<void> clearTokens() async {
     _accessToken = null;
     _refreshToken = null;
+    _prefs ??= await SharedPreferences.getInstance();
     await _prefs?.remove('access_token');
     await _prefs?.remove('refresh_token');
+    _log('Tokens cleared');
   }
 
   static bool get isLoggedIn => _accessToken != null;
@@ -85,39 +95,73 @@ class ApiService {
 
   static Future<Map<String, dynamic>> _handleResponse(http.Response response) async {
     _log('Response ${response.statusCode}: ${response.request?.url.path}');
+    
+    // Check if unauthorized
+    if (response.statusCode == 401 && _refreshToken != null) {
+      _log('401 detected. Attempting token refresh...');
+      final refreshed = await _doRefresh();
+      if (refreshed) {
+        _log('Token refreshed successfully. Requesting caller to retry.');
+        throw ApiException('token_refreshed', statusCode: 401);
+      }
+      _log('Token refresh failed.');
+    }
+
     Map<String, dynamic> body;
     try {
       body = jsonDecode(response.body) as Map<String, dynamic>;
     } catch (_) {
       throw ApiException('Invalid server response (${response.statusCode})');
     }
-    if (response.statusCode == 401 && _refreshToken != null) {
-      final refreshed = await _tryRefresh();
-      if (refreshed) throw ApiException('token_refreshed');
-    }
+
     if (!(body['success'] ?? false)) {
-      _log(body['message'] ?? 'Error', isError: true);
-      throw ApiException(body['message'] ?? 'An error occurred', statusCode: response.statusCode);
+      final msg = body['message'] ?? 'An error occurred';
+      final code = response.statusCode;
+      _log('API Error [$code]: $msg', isError: true);
+      throw ApiException(msg, statusCode: code);
     }
     return body;
   }
 
-  static Future<bool> _tryRefresh() async {
+  // Synchronized refresh: if multiple calls trigger refresh simultaneously, 
+  // only one actually goes to the server.
+  static Future<bool> _doRefresh() async {
+    if (_refreshFuture != null) return await _refreshFuture!;
+
+    _refreshFuture = _tryRefresh();
     try {
+      return await _refreshFuture!;
+    } finally {
+      _refreshFuture = null;
+    }
+  }
+
+  static Future<bool> _tryRefresh() async {
+    if (_refreshToken == null) return false;
+    try {
+      _log('Posting refresh token to server...');
       final response = await http.post(
         Uri.parse('${AppConfig.baseUrl}${AppStrings.refreshToken}'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'refreshToken': _refreshToken}),
-      );
+      ).timeout(const Duration(seconds: 15));
+
       final body = jsonDecode(response.body);
       if (body['success'] == true) {
         await saveTokens(body['data']['accessToken'], body['data']['refreshToken']);
         return true;
+      } else {
+        _log('Refresh rejected by server: ${body['message']}', isError: true);
+        // If server explicitly rejects (401/400), clear everything
+        if (response.statusCode == 401 || response.statusCode == 400) {
+          await clearTokens();
+        }
       }
     } catch (e) {
-      _log('Refresh failed: $e', isError: true);
+      _log('Refresh network/system error: $e', isError: true);
+      // DO NOT clear tokens for network errors, just fail this attempt.
+      // Next attempt might succeed if internet is back.
     }
-    await clearTokens();
     return false;
   }
 
