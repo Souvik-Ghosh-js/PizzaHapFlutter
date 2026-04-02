@@ -285,21 +285,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             icon: Icons.store_rounded,
             title: 'Branch',
             child: Row(children: [
+              const Icon(Icons.location_on_rounded,
+                  size: 16, color: Color(AppColors.primary)),
+              const SizedBox(width: 8),
               Expanded(
                   child: Text(
-                cart.selectedLocationName ?? 'No branch selected',
+                cart.selectedLocationName ?? 'Auto-detected',
                 style:
                     const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
               )),
-              TextButton(
-                onPressed: () =>
-                    Navigator.pushNamed(context, '/branch-selection'),
-                style: TextButton.styleFrom(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    minimumSize: Size.zero),
-                child: const Text('Change', style: TextStyle(fontSize: 12)),
-              ),
             ]),
           ),
           const SizedBox(height: 12),

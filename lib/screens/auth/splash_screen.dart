@@ -59,6 +59,14 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
     await context.read<AuthProvider>().init();
     if (!mounted) return;
+
+    // Restore persisted location for cart and menu
+    final cart = context.read<CartProvider>();
+    await cart.restoreLocation();
+    if (cart.selectedLocationId != null) {
+      context.read<MenuProvider>().setSelectedLocation(cart.selectedLocationId!);
+    }
+
     // Give a small buffer after auth init
     await Future.delayed(const Duration(milliseconds: 300));
     if (!mounted) return;
@@ -71,7 +79,6 @@ class _SplashScreenState extends State<SplashScreen>
 
     final auth = context.read<AuthProvider>();
     if (auth.isLoggedIn) {
-      final cart = context.read<CartProvider>();
       if (cart.selectedLocationId == null) {
         Navigator.pushReplacementNamed(context, '/branch-selection');
       } else {

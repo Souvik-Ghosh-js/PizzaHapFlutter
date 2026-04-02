@@ -14,526 +14,366 @@ class BranchSelectionScreen extends StatefulWidget {
   State<BranchSelectionScreen> createState() => _BranchSelectionScreenState();
 }
 
-class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
-  List<Location> _locations = [];
-  Location? _selected;
-  bool _loading = true;
-  bool _locating = false;
-  bool _locationUsed = false;
-  String? _gpsError;
+class _BranchSelectionScreenState extends State<BranchSelectionScreen>
+    with SingleTickerProviderStateMixin {
+  // States: detecting, inside_geofence, outside_geofence, gps_off, permission_denied, error
+  String _state = 'detecting';
+  String? _errorMessage;
+  Location? _detectedLocation;
+
+  late AnimationController _pulseController;
+  late Animation<double> _pulseAnim;
 
   @override
   void initState() {
     super.initState();
-    // Check geofence silently on load
-    _autoDetectLocation();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1400),
+    )..repeat(reverse: true);
+    _pulseAnim = Tween<double>(begin: 0.85, end: 1.15).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+    _detectLocation();
   }
 
-  Future<void> _autoDetectLocation() async {
-    setState(() {
-      _loading = true;
-      _locationUsed = false;
-    });
-    try {
-      LocationPermission perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.whileInUse || perm == LocationPermission.always) {
-        final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.medium);
-        final geofenceData = await ApiService.checkGeofence(lat: pos.latitude, lng: pos.longitude);
-        if (geofenceData['inside'] == true && geofenceData['location'] != null) {
-          final locData = geofenceData['location'];
-          final loc = Location.fromJson(locData);
-          if (mounted) {
-            context.read<CartProvider>().setLocation(loc.id, loc.name);
-            context.read<MenuProvider>().setSelectedLocation(loc.id);
-            Navigator.pushReplacementNamed(context, '/home');
-            return;
-          }
-        }
-      }
-    } catch (_) {}
-    // Fallback to normal loading if not inside geofence or no permission
-    _loadLocations();
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
   }
 
-  Future<void> _loadLocations() async {
-    setState(() {
-      _loading = true;
-      _locationUsed = false;
-    });
-    try {
-      debugPrint('Loading locations...');
-      final locs = await ApiService.getLocations();
-      debugPrint('Locations loaded: ${locs.length}');
-      if (mounted) {
-        setState(() {
-          _locations = locs;
-          _loading = false;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error loading locations: $e');
-      if (mounted) setState(() => _loading = false);
-
-      // Show error to user
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to load branches: $e'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  // GPS sort  only called when user taps "Use my location"
   Future<void> _detectLocation() async {
     setState(() {
-      _locating = true;
-      _gpsError = null;
+      _state = 'detecting';
+      _errorMessage = null;
     });
+
     try {
-      LocationPermission perm = await Geolocator.checkPermission();
-      if (perm == LocationPermission.denied) {
-        perm = await Geolocator.requestPermission();
-      }
-      if (perm == LocationPermission.denied ||
-          perm == LocationPermission.deniedForever) {
+      // Step 1: Check GPS service
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
         setState(() {
-          _locating = false;
-          _gpsError = 'Location permission denied. Select a branch manually.';
+          _state = 'gps_off';
+          _errorMessage = 'Please enable GPS/Location services to continue.';
         });
         return;
       }
 
-      final pos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.medium);
+      // Step 2: Check & request permission
+      LocationPermission perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied) {
+        setState(() {
+          _state = 'permission_denied';
+          _errorMessage = 'Location permission is needed to find your nearest branch.';
+        });
+        return;
+      }
+      if (perm == LocationPermission.deniedForever) {
+        setState(() {
+          _state = 'permission_denied_forever';
+          _errorMessage =
+              'Location permission is permanently denied. Please enable it from your phone Settings.';
+        });
+        return;
+      }
 
-      final locs =
-          await ApiService.getLocations(lat: pos.latitude, lng: pos.longitude);
+      // Step 3: Get position
+      final pos = await Geolocator.getCurrentPosition(
+        desiredAccuracy: LocationAccuracy.high,
+      ).timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => throw Exception('Location detection timed out'),
+      );
+
+      // Step 4: Check geofence
+      final geofenceData = await ApiService.checkGeofence(
+        lat: pos.latitude,
+        lng: pos.longitude,
+      );
 
       if (!mounted) return;
-      setState(() {
-        _locations = locs;
-        _selected = locs.isNotEmpty ? locs.first : _selected;
-        _locationUsed = true;
-        _locating = false;
-        _gpsError = null;
-      });
 
-      AppToast.info(context, 'Branches sorted by distance');
-    } catch (_) {
+      if (geofenceData['inside'] == true && geofenceData['location'] != null) {
+        // Inside a geofence — set location and navigate
+        final locData = geofenceData['location'];
+        final loc = Location.fromJson(locData);
+        setState(() {
+          _state = 'inside_geofence';
+          _detectedLocation = loc;
+        });
+
+        // Small delay to show success state before navigating
+        await Future.delayed(const Duration(milliseconds: 800));
+        if (!mounted) return;
+
+        context.read<CartProvider>().setLocation(loc.id, loc.name);
+        context.read<MenuProvider>().setSelectedLocation(loc.id);
+        Navigator.pushReplacementNamed(context, '/home');
+      } else {
+        // NOT inside any geofence
+        setState(() {
+          _state = 'outside_geofence';
+        });
+      }
+    } catch (e) {
+      debugPrint('Location detection error: $e');
       if (mounted) {
         setState(() {
-          _locating = false;
-          _gpsError = 'Could not get location. Select a branch manually.';
+          _state = 'error';
+          _errorMessage = 'Something went wrong while detecting your location. Please try again.';
         });
       }
     }
-  }
-
-  void _clearGps() => _loadLocations();
-
-  void _confirmBranch() {
-    if (_selected == null) {
-      AppToast.error(context, 'Please select a branch to continue');
-      return;
-    }
-    context.read<CartProvider>().setLocation(_selected!.id, _selected!.name);
-    context.read<MenuProvider>().setSelectedLocation(_selected!.id);
-    Navigator.pushReplacementNamed(context, '/home');
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(AppColors.background),
-      floatingActionButton: const CartFAB(),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Header ──────────────────────────────────────────────
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    Color(AppColors.primaryDark),
-                    Color(AppColors.primary)
-                  ],
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 28),
+          child: Column(
+            children: [
+              const Spacer(flex: 2),
+              // Animated icon
+              _buildIcon(),
+              const SizedBox(height: 32),
+              // Title + message
+              _buildMessage(),
+              const Spacer(flex: 2),
+              // Action buttons
+              _buildActions(),
+              const SizedBox(height: 40),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildIcon() {
+    switch (_state) {
+      case 'detecting':
+        return ScaleTransition(
+          scale: _pulseAnim,
+          child: Container(
+            width: 120,
+            height: 120,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  const Color(AppColors.primary).withValues(alpha: 0.15),
+                  const Color(AppColors.accent).withValues(alpha: 0.12),
+                ],
+              ),
+            ),
+            child: Center(
+              child: Container(
+                width: 70,
+                height: 70,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(AppColors.primary).withValues(alpha: 0.1),
+                ),
+                child: const Icon(
+                  Icons.my_location_rounded,
+                  size: 36,
+                  color: Color(AppColors.primary),
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Choose Your Branch',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 24,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Pick a location manually or tap below to sort by distance',
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.8),
-                      fontSize: 13,
-                      height: 1.4,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+            ),
+          ),
+        );
 
-                  // ── GPS toggle button ────────────────────────────
-                  GestureDetector(
-                    onTap: _locating
-                        ? null
-                        : (_locationUsed ? _clearGps : _detectLocation),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _locationUsed
-                            ? Colors.white
-                            : Colors.white.withValues(alpha: 0.18),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.4),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          if (_locating)
-                            const SizedBox(
-                              width: 15,
-                              height: 15,
-                              child: PizzaSpinner(size: 20, color: Colors.white),
-                            )
-                          else
-                            Icon(
-                              _locationUsed
-                                  ? Icons.my_location
-                                  : Icons.location_searching,
-                              size: 17,
-                              color: _locationUsed
-                                  ? const Color(AppColors.primary)
-                                  : Colors.white,
-                            ),
-                          const SizedBox(width: 8),
-                          Text(
-                            _locating
-                                ? 'Detecting location...'
-                                : _locationUsed
-                                    ? 'Sorted by distance'
-                                    : 'Use my location',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w700,
-                              color: _locationUsed
-                                  ? const Color(AppColors.primary)
-                                  : Colors.white,
-                            ),
-                          ),
-                          if (_locationUsed) ...[
-                            const SizedBox(width: 10),
-                            Icon(
-                              Icons.close,
-                              size: 14,
-                              color: const Color(AppColors.primary)
-                                  .withValues(alpha: 0.6),
-                            ),
-                            const SizedBox(width: 2),
-                            Text(
-                              'Reset',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: const Color(AppColors.primary)
-                                    .withValues(alpha: 0.7),
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
+      case 'inside_geofence':
+        return Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(AppColors.success).withValues(alpha: 0.12),
+          ),
+          child: const Icon(
+            Icons.check_circle_rounded,
+            size: 60,
+            color: Color(AppColors.success),
+          ),
+        );
 
-                  // GPS error message
-                  if (_gpsError != null) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        const Icon(Icons.info_outline,
-                            color: Colors.orangeAccent, size: 14),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            _gpsError!,
-                            style: const TextStyle(
-                                color: Colors.orangeAccent, fontSize: 12),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ],
+      case 'outside_geofence':
+        return Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(AppColors.warning).withValues(alpha: 0.12),
+          ),
+          child: const Icon(
+            Icons.location_off_rounded,
+            size: 56,
+            color: Color(AppColors.warning),
+          ),
+        );
+
+      case 'gps_off':
+        return Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.orange.withValues(alpha: 0.12),
+          ),
+          child: const Icon(
+            Icons.gps_off_rounded,
+            size: 56,
+            color: Colors.orange,
+          ),
+        );
+
+      case 'permission_denied':
+      case 'permission_denied_forever':
+        return Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: Colors.orange.withValues(alpha: 0.12),
+          ),
+          child: const Icon(
+            Icons.location_disabled_rounded,
+            size: 56,
+            color: Colors.orange,
+          ),
+        );
+
+      default: // error
+        return Container(
+          width: 120,
+          height: 120,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: const Color(AppColors.error).withValues(alpha: 0.12),
+          ),
+          child: const Icon(
+            Icons.error_outline_rounded,
+            size: 56,
+            color: Color(AppColors.error),
+          ),
+        );
+    }
+  }
+
+  Widget _buildMessage() {
+    switch (_state) {
+      case 'detecting':
+        return Column(
+          children: [
+            const Text(
+              'Detecting Your Location',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Color(AppColors.textPrimary),
               ),
             ),
-
-            // ── Branch list ──────────────────────────────────────────
-            Expanded(
-              child: _loading
-                  ? const Center(
-                      child: PizzaSpinner(size: 40))
-                  : _locations.isEmpty
-                      ? Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(Icons.sentiment_dissatisfied_rounded,
-                                  size: 48, color: Colors.grey),
-                              const SizedBox(height: 12),
-                              Text(
-                                'No branches found',
-                                style: TextStyle(
-                                    color: Colors.grey.shade600, fontSize: 16),
-                              ),
-                            ],
-                          ),
-                        )
-                      : ListView.builder(
-                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                          itemCount: _locations.length,
-                          itemBuilder: (context, index) {
-                            final loc = _locations[index];
-                            final isSelected = _selected?.id == loc.id;
-                            final isNearest = _locationUsed && index == 0;
-
-                            return GestureDetector(
-                              onTap: () => setState(() => _selected = loc),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                margin: const EdgeInsets.only(bottom: 12),
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: isSelected
-                                        ? const Color(AppColors.primary)
-                                        : Colors.transparent,
-                                    width: 2,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: isSelected
-                                          ? const Color(AppColors.primary)
-                                              .withValues(alpha: 0.12)
-                                          : Colors.black.withValues(alpha: 0.05),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 3),
-                                    ),
-                                  ],
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(14),
-                                  child: Row(
-                                    children: [
-                                      // Store icon
-                                      AnimatedContainer(
-                                        duration:
-                                            const Duration(milliseconds: 180),
-                                        width: 46,
-                                        height: 46,
-                                        decoration: BoxDecoration(
-                                          color: isSelected
-                                              ? const Color(AppColors.primary)
-                                                  .withValues(alpha: 0.1)
-                                              : Colors.grey.shade100,
-                                          borderRadius:
-                                              BorderRadius.circular(12),
-                                        ),
-                                        child: Icon(
-                                          Icons.store_rounded,
-                                          color: isSelected
-                                              ? const Color(AppColors.primary)
-                                              : Colors.grey.shade400,
-                                          size: 22,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 14),
-
-                                      // Name / address / meta
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Row(children: [
-                                              Expanded(
-                                                child: Text(
-                                                  loc.name,
-                                                  style: TextStyle(
-                                                    fontWeight: FontWeight.w700,
-                                                    fontSize: 14,
-                                                    color: isSelected
-                                                        ? const Color(
-                                                            AppColors.primary)
-                                                        : const Color(AppColors
-                                                            .textPrimary),
-                                                  ),
-                                                ),
-                                              ),
-                                              if (isNearest)
-                                                Container(
-                                                  padding: const EdgeInsets
-                                                      .symmetric(
-                                                      horizontal: 7,
-                                                      vertical: 3),
-                                                  decoration: BoxDecoration(
-                                                    color: const Color(
-                                                            AppColors.success)
-                                                        .withValues(alpha: 0.12),
-                                                    borderRadius:
-                                                        BorderRadius.circular(
-                                                            6),
-                                                  ),
-                                                  child: const Text(
-                                                    'Nearest',
-                                                    style: TextStyle(
-                                                      color: Color(
-                                                          AppColors.success),
-                                                      fontSize: 10,
-                                                      fontWeight:
-                                                          FontWeight.w700,
-                                                    ),
-                                                  ),
-                                                ),
-                                            ]),
-                                            const SizedBox(height: 3),
-                                            Text(
-                                              loc.address,
-                                              style: TextStyle(
-                                                fontSize: 12,
-                                                color: Colors.grey.shade500,
-                                                height: 1.4,
-                                              ),
-                                              maxLines: 2,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                            if (loc.phone != null ||
-                                                loc.distanceKm != null) ...[
-                                              const SizedBox(height: 5),
-                                              Row(children: [
-                                                if (loc.phone != null) ...[
-                                                  Icon(Icons.phone_outlined,
-                                                      size: 11,
-                                                      color:
-                                                          Colors.grey.shade400),
-                                                  const SizedBox(width: 3),
-                                                  Text(loc.phone!,
-                                                      style: TextStyle(
-                                                          fontSize: 11,
-                                                          color: Colors
-                                                              .grey.shade500)),
-                                                ],
-                                                if (loc.phone != null &&
-                                                    loc.distanceKm != null)
-                                                  const SizedBox(width: 10),
-                                                if (loc.distanceKm != null) ...[
-                                                  Icon(Icons.near_me_outlined,
-                                                      size: 11,
-                                                      color:
-                                                          Colors.grey.shade400),
-                                                  const SizedBox(width: 3),
-                                                  Text(
-                                                    '${loc.distanceKm!.toStringAsFixed(1)} km away',
-                                                    style: TextStyle(
-                                                        fontSize: 11,
-                                                        color: Colors
-                                                            .grey.shade500),
-                                                  ),
-                                                ],
-                                              ]),
-                                            ],
-                                          ],
-                                        ),
-                                      ),
-
-                                      // Selected check
-                                      if (isSelected)
-                                        Container(
-                                          width: 22,
-                                          height: 22,
-                                          decoration: const BoxDecoration(
-                                            color: Color(AppColors.primary),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(Icons.check,
-                                              color: Colors.white, size: 13),
-                                        ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
+            const SizedBox(height: 10),
+            Text(
+              'Hang tight! We\'re checking if PizzaHap delivers to your area...',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+                height: 1.5,
+              ),
             ),
+          ],
+        );
 
-            // ── Confirm bar ──────────────────────────────────────────
+      case 'inside_geofence':
+        return Column(
+          children: [
+            const Text(
+              'You\'re In Our Zone! 🎉',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Color(AppColors.success),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _detectedLocation != null
+                  ? 'Connected to ${_detectedLocation!.name}. Taking you to the menu...'
+                  : 'We deliver to your area! Setting up your experience...',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+                height: 1.5,
+              ),
+            ),
+          ],
+        );
+
+      case 'outside_geofence':
+        return Column(
+          children: [
+            const Text(
+              'We\'re Not Here Yet',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Color(AppColors.textPrimary),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'Unfortunately, PizzaHap doesn\'t deliver to your area yet. But we\'re expanding fast — stay tuned! 🍕',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+                height: 1.5,
+              ),
+            ),
+            const SizedBox(height: 20),
             Container(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 28),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
               decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: 0.06),
-                    blurRadius: 12,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
+                color: const Color(AppColors.primary).withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(
+                  color: const Color(AppColors.primary).withValues(alpha: 0.1),
+                ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  if (_selected != null)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 10),
-                      child: Row(children: [
-                        const Icon(Icons.location_on,
-                            color: Color(AppColors.primary), size: 15),
-                        const SizedBox(width: 5),
-                        Expanded(
-                          child: Text(
-                            'Selected: ${_selected!.name}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 13,
-                              color: Color(AppColors.primary),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                      ]),
-                    ),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 52,
-                    child: ElevatedButton(
-                      onPressed: _selected == null ? null : _confirmBranch,
-                      child: Text(
-                        _selected == null
-                            ? 'Select a Branch'
-                            : 'Continue with ${_selected!.name}',
-                        style: const TextStyle(
-                            fontSize: 15, fontWeight: FontWeight.w800),
+                  Icon(
+                    Icons.notifications_active_rounded,
+                    size: 20,
+                    color: const Color(AppColors.primary).withValues(alpha: 0.7),
+                  ),
+                  const SizedBox(width: 10),
+                  Flexible(
+                    child: Text(
+                      'We\'ll notify you when we arrive in your city!',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(AppColors.primary).withValues(alpha: 0.8),
+                        height: 1.4,
                       ),
                     ),
                   ),
@@ -541,8 +381,218 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
+        );
+
+      case 'gps_off':
+        return Column(
+          children: [
+            const Text(
+              'GPS Is Turned Off',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Color(AppColors.textPrimary),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'We need your location to check if PizzaHap delivers to your area. Please turn on GPS and try again.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+                height: 1.5,
+              ),
+            ),
+          ],
+        );
+
+      case 'permission_denied':
+      case 'permission_denied_forever':
+        return Column(
+          children: [
+            const Text(
+              'Location Permission Required',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Color(AppColors.textPrimary),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _errorMessage ?? 'We need location access to find your nearest PizzaHap branch.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+                height: 1.5,
+              ),
+            ),
+          ],
+        );
+
+      default: // error
+        return Column(
+          children: [
+            const Text(
+              'Something Went Wrong',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+                color: Color(AppColors.textPrimary),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _errorMessage ?? 'We couldn\'t detect your location. Please check your internet and try again.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.grey.shade500,
+                height: 1.5,
+              ),
+            ),
+          ],
+        );
+    }
+  }
+
+  Widget _buildActions() {
+    switch (_state) {
+      case 'detecting':
+      case 'inside_geofence':
+        // Show a subtle loading indicator
+        return const SizedBox(
+          height: 52,
+          child: Center(
+            child: PizzaSpinner(size: 28),
+          ),
+        );
+
+      case 'outside_geofence':
+        return Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _detectLocation,
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+                label: const Text(
+                  'Retry Location',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        );
+
+      case 'gps_off':
+        return Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await Geolocator.openLocationSettings();
+                  // After returning from settings, retry
+                  await Future.delayed(const Duration(milliseconds: 500));
+                  _detectLocation();
+                },
+                icon: const Icon(Icons.settings_rounded, size: 20),
+                label: const Text(
+                  'Open Location Settings',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: _detectLocation,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text(
+                  'Try Again',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        );
+
+      case 'permission_denied':
+        return Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _detectLocation,
+                icon: const Icon(Icons.location_on_rounded, size: 20),
+                label: const Text(
+                  'Grant Permission',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+          ],
+        );
+
+      case 'permission_denied_forever':
+        return Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await Geolocator.openAppSettings();
+                  await Future.delayed(const Duration(milliseconds: 500));
+                  _detectLocation();
+                },
+                icon: const Icon(Icons.settings_rounded, size: 20),
+                label: const Text(
+                  'Open App Settings',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              height: 48,
+              child: OutlinedButton.icon(
+                onPressed: _detectLocation,
+                icon: const Icon(Icons.refresh_rounded, size: 18),
+                label: const Text(
+                  'Try Again',
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        );
+
+      default: // error
+        return SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton.icon(
+            onPressed: _detectLocation,
+            icon: const Icon(Icons.refresh_rounded, size: 20),
+            label: const Text(
+              'Try Again',
+              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+        );
+    }
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import '../../providers/providers.dart';
 import '../../config/app_config.dart';
@@ -97,6 +98,11 @@ class _ProfileScreenState extends State<ProfileScreen>
                   child: ElevatedButton(
                 onPressed: () async {
                   Navigator.pop(context);
+                  // Clear persisted location on logout
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.remove('selected_location_id');
+                  await prefs.remove('selected_location_name');
+                  context.read<CartProvider>().clear();
                   await context.read<AuthProvider>().logout();
                   if (mounted) {
                     Navigator.pushReplacementNamed(context, '/login');

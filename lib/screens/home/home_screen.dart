@@ -127,36 +127,27 @@ class _HomeScreenState extends State<HomeScreen>
                                     ),
                                     if (cart.selectedLocationName != null) ...[
                                       const SizedBox(height: 4),
-                                      GestureDetector(
-                                        onTap: () => Navigator.pushNamed(
-                                            context, '/branch-selection'),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
-                                          children: [
-                                            const Icon(
-                                                Icons.location_on_rounded,
-                                                color: Colors.white70,
-                                                size: 13),
-                                            const SizedBox(width: 3),
-                                            Flexible(
-                                              child: Text(
-                                                cart.selectedLocationName!,
-                                                style: const TextStyle(
-                                                    color: Colors.white70,
-                                                    fontSize: 11,
-                                                    fontWeight:
-                                                        FontWeight.w600),
-                                                maxLines: 1,
-                                                overflow: TextOverflow.ellipsis,
-                                              ),
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(
+                                              Icons.location_on_rounded,
+                                              color: Colors.white70,
+                                              size: 13),
+                                          const SizedBox(width: 3),
+                                          Flexible(
+                                            child: Text(
+                                              cart.selectedLocationName!,
+                                              style: const TextStyle(
+                                                  color: Colors.white70,
+                                                  fontSize: 11,
+                                                  fontWeight:
+                                                      FontWeight.w600),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
-                                            const Icon(
-                                                Icons
-                                                    .keyboard_arrow_down_rounded,
-                                                color: Colors.white54,
-                                                size: 14),
-                                          ],
-                                        ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ],

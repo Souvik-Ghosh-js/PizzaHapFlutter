@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart' hide Category;
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/models.dart';
 import '../services/api_service.dart';
 import '../services/notification_service.dart';
@@ -235,7 +236,29 @@ class CartProvider extends ChangeNotifier {
   void setLocation(int locationId, String locationName) {
     _selectedLocationId = locationId;
     _selectedLocationName = locationName;
+    _persistLocation();
     notifyListeners();
+  }
+
+  Future<void> _persistLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (_selectedLocationId != null) {
+      await prefs.setInt('selected_location_id', _selectedLocationId!);
+      await prefs.setString('selected_location_name', _selectedLocationName ?? '');
+    } else {
+      await prefs.remove('selected_location_id');
+      await prefs.remove('selected_location_name');
+    }
+  }
+
+  /// Restore persisted location on app startup
+  Future<void> restoreLocation() async {
+    final prefs = await SharedPreferences.getInstance();
+    _selectedLocationId = prefs.getInt('selected_location_id');
+    _selectedLocationName = prefs.getString('selected_location_name');
+    if (_selectedLocationId != null) {
+      notifyListeners();
+    }
   }
 
   void setDeliveryType(String type) { _deliveryType = type; notifyListeners(); }
