@@ -91,7 +91,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                       decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(20)),
-                      child: Text('Worth ₹$balance', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
+                      child: Text('Worth ₹${(balance * 0.5).toStringAsFixed(0)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 14)),
                     ),
                   ]),
                 ),
@@ -107,9 +107,9 @@ class _CoinsScreenState extends State<CoinsScreen> {
                   child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                     const Text('How Coins Work', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15)),
                     const SizedBox(height: 12),
-                    _ruleRow(Icons.delivery_dining_rounded, 'Earn', 'Get 1 coin for every ₹10 spent after delivery'),
+                    _ruleRow(Icons.delivery_dining_rounded, 'Earn', 'Get 1 coin per ₹10 spent on orders above ₹300'),
                     const SizedBox(height: 8),
-                    _ruleRow(Icons.savings_rounded, 'Redeem', '1 coin = ₹0.50 discount on your next order'),
+                    _ruleRow(Icons.savings_rounded, 'Redeem', '1 coin = ₹0.50 off on orders above ₹300'),
                     const SizedBox(height: 8),
                     _ruleRow(Icons.refresh_rounded, 'Revert', 'Coins are deducted if you get a refund'),
                     const SizedBox(height: 8),

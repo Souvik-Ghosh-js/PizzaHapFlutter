@@ -471,16 +471,20 @@ class _CoinRedemptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canRedeem = coinBalance > 0;
+    final cart = context.watch<CartProvider>();
+    final subtotal = cart.subtotal;
+    final isMinOrder = subtotal > 300;
+    final canRedeem = coinBalance > 0 && isMinOrder;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: useCoins
+          color: (useCoins && isMinOrder)
               ? const Color(AppColors.coins).withValues(alpha: 0.6)
               : Colors.grey.shade100,
-          width: useCoins ? 1.5 : 1,
+          width: (useCoins && isMinOrder) ? 1.5 : 1,
         ),
         boxShadow: [
           BoxShadow(
@@ -514,9 +518,11 @@ class _CoinRedemptionCard extends StatelessWidget {
                         style: TextStyle(
                             fontWeight: FontWeight.w800, fontSize: 14)),
                     Text(
-                      canRedeem
-                          ? 'You have $coinBalance coins = ₹$coinBalance'
-                          : 'No coins yet — earn 1 coin per ₹10 spent',
+                      !isMinOrder
+                          ? 'Min. order ₹300 required to redeem'
+                          : (coinBalance > 0
+                              ? 'You have $coinBalance coins = ₹${(coinBalance * 0.5).toStringAsFixed(0)}'
+                              : 'No coins yet — earn 1 coin per ₹10 spent'),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight:

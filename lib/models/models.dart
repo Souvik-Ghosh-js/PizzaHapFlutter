@@ -372,7 +372,8 @@ class Product {
   /// Get effective extra_price for a crust at a given size.
   /// Priority: size-specific > location/default (effectiveExtraPrice).
   double getCrustPrice(CrustType crust, String sizeCode) {
-    final override = crustSizePricing.where((p) => p.crustId == crust.id && p.sizeCode == sizeCode);
+    final override = crustSizePricing.where((p) => 
+        p.crustId == crust.id && p.sizeCode.toLowerCase() == sizeCode.toLowerCase());
     if (override.isNotEmpty) return override.first.extraPrice;
     return crust.effectiveExtraPrice;
   }
@@ -380,7 +381,8 @@ class Product {
   /// Get effective price for a topping at a given size.
   /// Priority: size-specific > location/default (effectivePrice).
   double getToppingPrice(Topping topping, String sizeCode) {
-    final override = toppingSizePricing.where((p) => p.toppingId == topping.id && p.sizeCode == sizeCode);
+    final override = toppingSizePricing.where((p) => 
+        p.toppingId == topping.id && p.sizeCode.toLowerCase() == sizeCode.toLowerCase());
     if (override.isNotEmpty) return override.first.price;
     return topping.effectivePrice;
   }
