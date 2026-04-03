@@ -189,7 +189,7 @@ class _OrderConfirmScreenState extends State<OrderConfirmScreen>
                             if (widget.coinsRedeemed > 0) ...[
                               Divider(color: Colors.grey.shade100, height: 20),
                               _detailRow(Icons.stars_rounded,
-                                  'Coins Redeemed', '${widget.coinsRedeemed}',
+                                  'Coins Discount', '₹${(widget.coinsRedeemed * 0.5).toStringAsFixed(2)}',
                                   valueColor: const Color(AppColors.coins)),
                             ],
                           ]),

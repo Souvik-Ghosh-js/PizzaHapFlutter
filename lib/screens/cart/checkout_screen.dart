@@ -246,11 +246,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void _toggleCoins(bool val, CartProvider cart, int coinBalance) {
     setState(() => _useCoins = val);
     if (val) {
-      final maxRedeem = coinBalance.clamp(
-        0,
-        (cart.subtotal - cart.discount + cart.deliveryFee).floor(),
-      );
-      cart.setCoinsToRedeem(maxRedeem);
+      cart.setCoinsToRedeem(coinBalance);
     } else {
       cart.setCoinsToRedeem(0);
     }
@@ -269,7 +265,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       });
     }
 
-    final coinsOff = _useCoins ? cart.coinsToRedeem.toDouble() : 0.0;
+    final coinsOff = _useCoins ? cart.coinsDiscount : 0.0;
     final finalTotal =
         (cart.subtotal - cart.discount - coinsOff + cart.deliveryFee)
             .clamp(0.0, double.infinity);

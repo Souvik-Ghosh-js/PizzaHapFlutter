@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 import '../models/models.dart';
 
@@ -49,8 +50,10 @@ Future<T> _safeRequest<T>(Future<T> Function() fn) async {
   }
 }
 
+
 class ApiService {
   static SharedPreferences? _prefs;
+  static const _storage = FlutterSecureStorage();
   static String? _accessToken;
   static String? _refreshToken;
 
@@ -59,8 +62,24 @@ class ApiService {
 
   static Future<void> init() async {
     _prefs ??= await SharedPreferences.getInstance();
-    _accessToken = _prefs?.getString('access_token');
-    _refreshToken = _prefs?.getString('refresh_token');
+    
+    // Tokens prefer SecureStorage but check SharedPreferences to migrate if needed
+    _accessToken = await _storage.read(key: 'access_token');
+    _refreshToken = await _storage.read(key: 'refresh_token');
+
+    // Migration logic: if tokens in prefs but not in secure storage
+    if (_accessToken == null) {
+      _accessToken = _prefs?.getString('access_token');
+      _refreshToken = _prefs?.getString('refresh_token');
+      if (_accessToken != null && _refreshToken != null) {
+        await _storage.write(key: 'access_token', value: _accessToken);
+        await _storage.write(key: 'refresh_token', value: _refreshToken);
+        await _prefs?.remove('access_token');
+        await _prefs?.remove('refresh_token');
+        _log('Tokens migrated to SecureStorage');
+      }
+    }
+
     _log('Init - Logged in: ${_accessToken != null}');
     if (_accessToken != null) {
         _log('Auth Header: Bearer ${_accessToken!.substring(0, 5)}...');
@@ -70,19 +89,17 @@ class ApiService {
   static Future<void> saveTokens(String access, String refresh) async {
     _accessToken = access;
     _refreshToken = refresh;
-    _prefs ??= await SharedPreferences.getInstance();
-    await _prefs?.setString('access_token', access);
-    await _prefs?.setString('refresh_token', refresh);
-    _log('Tokens saved successfully');
+    await _storage.write(key: 'access_token', value: access);
+    await _storage.write(key: 'refresh_token', value: refresh);
+    _log('Tokens saved successfully to SecureStorage');
   }
 
   static Future<void> clearTokens() async {
     _accessToken = null;
     _refreshToken = null;
-    _prefs ??= await SharedPreferences.getInstance();
-    await _prefs?.remove('access_token');
-    await _prefs?.remove('refresh_token');
-    _log('Tokens cleared');
+    await _storage.delete(key: 'access_token');
+    await _storage.delete(key: 'refresh_token');
+    _log('Tokens cleared from SecureStorage');
   }
 
   static bool get isLoggedIn => _accessToken != null;

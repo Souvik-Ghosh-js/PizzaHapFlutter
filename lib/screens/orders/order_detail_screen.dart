@@ -394,8 +394,8 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                     if (order.coinsRedeemed > 0) ...[
                       const SizedBox(height: 6),
                       PriceRow(
-                          label: 'Coins Redeemed',
-                          amount: -order.coinsRedeemed.toDouble(),
+                          label: 'Coins Discount (${order.coinsRedeemed})',
+                          amount: -(order.coinsRedeemed * 0.5),
                           color: const Color(AppColors.coins)),
                     ],
                     const SizedBox(height: 6),
