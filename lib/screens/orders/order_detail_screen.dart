@@ -300,7 +300,7 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                           children: [
                         if (order.coinsRedeemed > 0)
                           Text(
-                              '${order.coinsRedeemed} coins redeemed (₹${order.coinsRedeemed} off)',
+                              '${order.coinsRedeemed} coins redeemed (₹${(order.coinsRedeemed * 0.5).toStringAsFixed(2)} off)',
                               style: const TextStyle(
                                   fontSize: 13,
                                   fontWeight: FontWeight.w600,

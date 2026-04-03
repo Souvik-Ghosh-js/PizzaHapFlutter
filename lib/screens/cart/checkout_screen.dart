@@ -558,7 +558,7 @@ class _CoinRedemptionCard extends StatelessWidget {
                                 color: Color(AppColors.coins),
                                 fontSize: 13)),
                       ]),
-                      Text('- ₹$coinsToRedeem',
+                      Text('- ₹${(coinsToRedeem * 0.5).toStringAsFixed(2)}',
                           style: const TextStyle(
                               fontWeight: FontWeight.w800,
                               color: Color(AppColors.coins),

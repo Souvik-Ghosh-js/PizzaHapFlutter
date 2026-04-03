@@ -213,7 +213,7 @@ class CartProvider extends ChangeNotifier {
     }
     return coupon.calculatedDiscount ?? 0.0;
   }
-  double get coinsDiscount => _coinsToRedeem.toDouble();
+  double get coinsDiscount => _coinsToRedeem * 0.5;
   // Backend has NO TAX — total = subtotal - discount - coins_discount + delivery_fee
   double get tax => 0.0;
   double get total => (subtotal - discount - coinsDiscount + deliveryFee).clamp(0.0, double.infinity);
@@ -276,9 +276,11 @@ class CartProvider extends ChangeNotifier {
 
   void setCoinsToRedeem(int coins) {
     // Clamp: can't redeem more coins than available, and can't exceed the payable amount
+    // 1 coin = ₹0.50, so max coins = payable / 0.5 = payable * 2
     final maxByBalance = coins.clamp(0, _availableCoins);
-    final payable = (subtotal - discount + deliveryFee).floor();
-    _coinsToRedeem = maxByBalance.clamp(0, payable);
+    final payable = (subtotal - discount + deliveryFee);
+    final maxCoinsByPayable = (payable / 0.5).floor();
+    _coinsToRedeem = maxByBalance.clamp(0, maxCoinsByPayable);
     notifyListeners();
   }
 

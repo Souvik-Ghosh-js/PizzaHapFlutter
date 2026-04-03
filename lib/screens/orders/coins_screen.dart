@@ -109,7 +109,7 @@ class _CoinsScreenState extends State<CoinsScreen> {
                     const SizedBox(height: 12),
                     _ruleRow(Icons.delivery_dining_rounded, 'Earn', 'Get 1 coin for every ₹10 spent after delivery'),
                     const SizedBox(height: 8),
-                    _ruleRow(Icons.savings_rounded, 'Redeem', '1 coin = ₹1 discount on your next order'),
+                    _ruleRow(Icons.savings_rounded, 'Redeem', '1 coin = ₹0.50 discount on your next order'),
                     const SizedBox(height: 8),
                     _ruleRow(Icons.refresh_rounded, 'Revert', 'Coins are deducted if you get a refund'),
                     const SizedBox(height: 8),

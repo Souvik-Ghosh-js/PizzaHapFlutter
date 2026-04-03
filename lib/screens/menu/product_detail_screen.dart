@@ -57,17 +57,20 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
     }
   }
 
+  String get _sizeCode => _selectedSize?.sizeCode ?? '';
+
   double get _totalPrice {
     if (_product == null || _selectedSize == null) return 0;
     double price = _selectedSize!.effectivePrice;
-    if (_selectedCrust != null) price += _selectedCrust!.effectiveExtraPrice;
+    final sc = _sizeCode;
+    if (_selectedCrust != null) price += _product!.getCrustPrice(_selectedCrust!, sc);
     for (final id in _selectedToppingIds) {
       final t = _product!.toppings.firstWhere(
         (t) => t.id == id,
         orElse: () =>
             Topping(id: 0, name: '', price: 0, effectivePrice: 0, isVeg: true, isAvailable: true),
       );
-      price += t.effectivePrice;
+      price += _product!.getToppingPrice(t, sc);
     }
     return price * _quantity;
   }
@@ -373,10 +376,10 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                                               fontWeight: FontWeight.w700,
                                               fontSize: 13,
                                             )),
-                                        if (c.effectiveExtraPrice > 0) ...[
+                                        if (_product!.getCrustPrice(c, _sizeCode) > 0) ...[
                                           const SizedBox(width: 4),
                                           Text(
-                                              '+₹${c.effectiveExtraPrice.toStringAsFixed(0)}',
+                                              '+₹${_product!.getCrustPrice(c, _sizeCode).toStringAsFixed(0)}',
                                               style: TextStyle(
                                                   color: sel
                                                       ? Colors.white70
@@ -453,7 +456,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen>
                                                       AppColors.textPrimary),
                                             )),
                                         const SizedBox(width: 4),
-                                        Text('+₹${t.effectivePrice.toStringAsFixed(0)}',
+                                        Text('+₹${_product!.getToppingPrice(t, _sizeCode).toStringAsFixed(0)}',
                                             style: TextStyle(
                                                 fontSize: 11,
                                                 color: Colors.grey.shade500)),
