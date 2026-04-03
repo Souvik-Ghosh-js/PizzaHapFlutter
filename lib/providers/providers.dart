@@ -11,7 +11,7 @@ class AuthProvider extends ChangeNotifier {
   bool _loading = false;
   String? _error;
   bool _sessionExpired = false;
-  bool _isInitialized = false;
+  bool _isInitialized = false;  // Add this flag
 
   User? get user => _user;
   bool get loading => _loading;
@@ -27,14 +27,13 @@ class AuthProvider extends ChangeNotifier {
     }
 
     print('=== AUTH PROVIDER INIT ===');
+
+    // Ensure ApiService is initialized
     await ApiService.init();
 
-    // Try to restore session if needed
-    if (!ApiService.isLoggedIn) {
-      print('No active session, attempting restore...');
-      final restored = await ApiService.restoreSession();
-      print('Session restored: $restored');
-    }
+    // Try to restore session
+    final restored = await ApiService.restoreSession();
+    print('Session restored: $restored');
 
     if (ApiService.isLoggedIn) {
       print('User is logged in, fetching user data...');
@@ -60,13 +59,14 @@ class AuthProvider extends ChangeNotifier {
             }
           }
         } else if (e.statusCode == 401) {
+          // Only clear if it's a terminal auth failure
           print('401 error, clearing tokens');
           await ApiService.clearTokens();
           _user = null;
         }
       } catch (e) {
         print('Unexpected error: $e');
-        // Keep tokens, might be network issue
+        // Network or other transient error: keep tokens, let them try later
       }
     } else {
       print('User is NOT logged in, no tokens found');
@@ -245,7 +245,7 @@ class CartProvider extends ChangeNotifier {
     }
     return coupon.calculatedDiscount ?? 0.0;
   }
-  double get coinsDiscount => _coinsToRedeem.toDouble();
+  double get coinsDiscount => _coinsToRedeem * 0.5;
   // Backend has NO TAX — total = subtotal - discount - coins_discount + delivery_fee
   double get tax => 0.0;
   double get total => (subtotal - discount - coinsDiscount + deliveryFee).clamp(0.0, double.infinity);
@@ -308,9 +308,11 @@ class CartProvider extends ChangeNotifier {
 
   void setCoinsToRedeem(int coins) {
     // Clamp: can't redeem more coins than available, and can't exceed the payable amount
+    // 1 coin = ₹0.50, so max coins = payable / 0.5 = payable * 2
     final maxByBalance = coins.clamp(0, _availableCoins);
-    final payable = (subtotal - discount + deliveryFee).floor();
-    _coinsToRedeem = maxByBalance.clamp(0, payable);
+    final payable = (subtotal - discount + deliveryFee);
+    final maxCoinsByPayable = (payable / 0.5).floor();
+    _coinsToRedeem = maxByBalance.clamp(0, maxCoinsByPayable);
     notifyListeners();
   }
 

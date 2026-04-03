@@ -35,11 +35,8 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
             vsync: this, duration: const Duration(milliseconds: 200)));
     _tabControllers[_currentIndex].forward();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final isLoggedIn = await _checkAuth();
-      if (!isLoggedIn) return; // Prevent network calls if we kicked them out
-      
-      if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkAuth();
       context.read<NotificationProvider>().load();
       context.read<OrderProvider>().loadActiveOrder();
       _checkPendingReviews();
@@ -56,17 +53,11 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
     });
   }
 
-  Future<bool> _checkAuth() async {
+  void _checkAuth() {
     final auth = context.read<AuthProvider>();
-    if (!auth.isInitialized) {
-      await auth.init();
-      if (!mounted) return false;
-    }
     if (!auth.isLoggedIn) {
       Navigator.pushNamedAndRemoveUntil(context, '/login', (r) => false);
-      return false;
     }
-    return true;
   }
 
   void _checkPendingReviews() async {
@@ -76,10 +67,10 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
     final order = await orderProvider.getLatestUnreviewedDeliveredOrder();
     if (order != null && order.feedback == null && mounted) {
       final prefs = await SharedPreferences.getInstance();
-      if (!mounted) return;
       final shown = prefs.getStringList('dismissed_review_ids') ?? [];
       if (shown.contains(order.id.toString())) return;
 
+      if (!context.mounted) return;
       FeedbackDialog.show(context, order, onSuccess: () {
         if (mounted) context.read<AuthProvider>().refreshUser();
       });
@@ -139,16 +130,6 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    final auth = context.watch<AuthProvider>();
-    if (!auth.isInitialized) {
-      return const Scaffold(
-        backgroundColor: Color(AppColors.background),
-        body: Center(
-          child: CircularProgressIndicator(color: Color(AppColors.primary)),
-        ),
-      );
-    }
-
     final cart = context.watch<CartProvider>();
     // Don't show floating cart when on the cart tab (index 2)
     final showFloatingCart = cart.itemCount > 0 && _currentIndex != 2;

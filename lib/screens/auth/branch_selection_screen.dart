@@ -21,6 +21,10 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
   String? _errorMessage;
   Location? _detectedLocation;
 
+  List<Location> _locations = [];
+  Location? _selectedManualLocation;
+  bool _loadingLocations = false;
+
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
 
@@ -43,6 +47,23 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
     super.dispose();
   }
 
+  Future<void> _loadLocations() async {
+    if (_locations.isNotEmpty || _loadingLocations) return;
+    setState(() => _loadingLocations = true);
+    try {
+      _locations = await ApiService.getLocations();
+    } catch (_) {}
+    if (mounted) setState(() => _loadingLocations = false);
+  }
+
+  void _confirmManualSelection() {
+    if (_selectedManualLocation == null) return;
+    final loc = _selectedManualLocation!;
+    context.read<CartProvider>().setLocation(loc.id, loc.name);
+    context.read<MenuProvider>().setSelectedLocation(loc.id);
+    Navigator.pushReplacementNamed(context, '/home');
+  }
+
   Future<void> _detectLocation() async {
     setState(() {
       _state = 'detecting';
@@ -57,6 +78,7 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
           _state = 'gps_off';
           _errorMessage = 'Please enable GPS/Location services to continue.';
         });
+        _loadLocations();
         return;
       }
 
@@ -70,6 +92,7 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
           _state = 'permission_denied';
           _errorMessage = 'Location permission is needed to find your nearest branch.';
         });
+        _loadLocations();
         return;
       }
       if (perm == LocationPermission.deniedForever) {
@@ -78,6 +101,7 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
           _errorMessage =
               'Location permission is permanently denied. Please enable it from your phone Settings.';
         });
+        _loadLocations();
         return;
       }
 
@@ -118,6 +142,7 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
         setState(() {
           _state = 'outside_geofence';
         });
+        _loadLocations();
       }
     } catch (e) {
       debugPrint('Location detection error: $e');
@@ -126,6 +151,7 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
           _state = 'error';
           _errorMessage = 'Something went wrong while detecting your location. Please try again.';
         });
+        _loadLocations();
       }
     }
   }
@@ -135,21 +161,24 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
     return Scaffold(
       backgroundColor: const Color(AppColors.background),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          child: Column(
-            children: [
-              const Spacer(flex: 2),
-              // Animated icon
-              _buildIcon(),
-              const SizedBox(height: 32),
-              // Title + message
-              _buildMessage(),
-              const Spacer(flex: 2),
-              // Action buttons
-              _buildActions(),
-              const SizedBox(height: 40),
-            ],
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 40),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: MediaQuery.of(context).size.height -
+                  MediaQuery.of(context).padding.top -
+                  MediaQuery.of(context).padding.bottom - 80,
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildIcon(),
+                const SizedBox(height: 32),
+                _buildMessage(),
+                const SizedBox(height: 40),
+                _buildActions(),
+              ],
+            ),
           ),
         ),
       ),
@@ -461,6 +490,78 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
     }
   }
 
+  Widget _buildManualPicker() {
+    if (_loadingLocations) {
+      return const Padding(
+        padding: EdgeInsets.only(top: 20),
+        child: Center(child: PizzaSpinner(size: 24)),
+      );
+    }
+    if (_locations.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      children: [
+        const SizedBox(height: 24),
+        Row(
+          children: [
+            Expanded(child: Divider(color: Colors.grey.shade300)),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Text('or choose manually',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade500)),
+            ),
+            Expanded(child: Divider(color: Colors.grey.shade300)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.04), blurRadius: 8)],
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<int>(
+              isExpanded: true,
+              value: _selectedManualLocation?.id,
+              hint: const Text('Select a branch', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500)),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              items: _locations.map((loc) => DropdownMenuItem<int>(
+                value: loc.id,
+                child: Row(children: [
+                  const Icon(Icons.storefront_rounded, size: 18, color: Color(AppColors.primary)),
+                  const SizedBox(width: 10),
+                  Expanded(child: Text(loc.name, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600))),
+                ]),
+              )).toList(),
+              onChanged: (id) {
+                setState(() {
+                  _selectedManualLocation = _locations.firstWhere((l) => l.id == id);
+                });
+              },
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: ElevatedButton(
+            onPressed: _selectedManualLocation != null ? _confirmManualSelection : null,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(AppColors.primary),
+              disabledBackgroundColor: const Color(AppColors.primary).withValues(alpha: 0.3),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+            child: const Text('Continue', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white)),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildActions() {
     switch (_state) {
       case 'detecting':
@@ -479,15 +580,16 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
             SizedBox(
               width: double.infinity,
               height: 52,
-              child: ElevatedButton.icon(
+              child: OutlinedButton.icon(
                 onPressed: _detectLocation,
-                icon: const Icon(Icons.refresh_rounded, size: 20),
+                icon: const Icon(Icons.refresh_rounded, size: 18),
                 label: const Text(
                   'Retry Location',
-                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
               ),
             ),
+            _buildManualPicker(),
           ],
         );
 
@@ -500,7 +602,6 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
               child: ElevatedButton.icon(
                 onPressed: () async {
                   await Geolocator.openLocationSettings();
-                  // After returning from settings, retry
                   await Future.delayed(const Duration(milliseconds: 500));
                   _detectLocation();
                 },
@@ -511,19 +612,7 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: OutlinedButton.icon(
-                onPressed: _detectLocation,
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text(
-                  'Try Again',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
+            _buildManualPicker(),
           ],
         );
 
@@ -542,6 +631,7 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
                 ),
               ),
             ),
+            _buildManualPicker(),
           ],
         );
 
@@ -564,34 +654,27 @@ class _BranchSelectionScreenState extends State<BranchSelectionScreen>
                 ),
               ),
             ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: OutlinedButton.icon(
-                onPressed: _detectLocation,
-                icon: const Icon(Icons.refresh_rounded, size: 18),
-                label: const Text(
-                  'Try Again',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
+            _buildManualPicker(),
           ],
         );
 
       default: // error
-        return SizedBox(
-          width: double.infinity,
-          height: 52,
-          child: ElevatedButton.icon(
-            onPressed: _detectLocation,
-            icon: const Icon(Icons.refresh_rounded, size: 20),
-            label: const Text(
-              'Try Again',
-              style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+        return Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _detectLocation,
+                icon: const Icon(Icons.refresh_rounded, size: 20),
+                label: const Text(
+                  'Try Again',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ),
             ),
-          ),
+            _buildManualPicker(),
+          ],
         );
     }
   }

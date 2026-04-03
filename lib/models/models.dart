@@ -125,8 +125,8 @@ class AuthResponse {
 
   factory AuthResponse.fromJson(Map<String, dynamic> json) => AuthResponse(
         user: User.fromJson(json['user']),
-        accessToken: json['accessToken'] ?? json['access_token'] ?? '',
-        refreshToken: json['refreshToken'] ?? json['refresh_token'] ?? '',
+        accessToken: json['accessToken'],
+        refreshToken: json['refreshToken'],
       );
 }
 
@@ -228,6 +228,7 @@ class Category {
 class ProductSize {
   final int id;
   final String sizeName;
+  final String sizeCode;
   final double price;
   final double effectivePrice;
   final bool isAvailable;
@@ -235,6 +236,7 @@ class ProductSize {
   ProductSize(
       {required this.id,
       required this.sizeName,
+      required this.sizeCode,
       required this.price,
       required this.effectivePrice,
       required this.isAvailable});
@@ -242,6 +244,7 @@ class ProductSize {
   factory ProductSize.fromJson(Map<String, dynamic> json) => ProductSize(
         id: json['id'],
         sizeName: json['size_name'] ?? '',
+        sizeCode: json['size_code'] ?? '',
         price: _parseDouble(json['price']),
         effectivePrice: _parseDouble(json['effective_price'] ?? json['price']),
         isAvailable: json['is_available'] == 1 || json['is_available'] == true,
@@ -297,6 +300,34 @@ class Topping {
       );
 }
 
+class CrustSizePricing {
+  final int crustId;
+  final String sizeCode;
+  final double extraPrice;
+
+  CrustSizePricing({required this.crustId, required this.sizeCode, required this.extraPrice});
+
+  factory CrustSizePricing.fromJson(Map<String, dynamic> json) => CrustSizePricing(
+    crustId: json['crust_id'],
+    sizeCode: json['size_code'] ?? '',
+    extraPrice: _parseDouble(json['extra_price']),
+  );
+}
+
+class ToppingSizePricing {
+  final int toppingId;
+  final String sizeCode;
+  final double price;
+
+  ToppingSizePricing({required this.toppingId, required this.sizeCode, required this.price});
+
+  factory ToppingSizePricing.fromJson(Map<String, dynamic> json) => ToppingSizePricing(
+    toppingId: json['topping_id'],
+    sizeCode: json['size_code'] ?? '',
+    price: _parseDouble(json['price']),
+  );
+}
+
 class Product {
   final int id;
   final String name;
@@ -313,6 +344,8 @@ class Product {
   final List<ProductSize> sizes;
   final List<CrustType> crusts;
   final List<Topping> toppings;
+  final List<CrustSizePricing> crustSizePricing;
+  final List<ToppingSizePricing> toppingSizePricing;
   final bool? locationAvailable;
 
   Product({
@@ -331,8 +364,28 @@ class Product {
     this.sizes = const [],
     this.crusts = const [],
     this.toppings = const [],
+    this.crustSizePricing = const [],
+    this.toppingSizePricing = const [],
     this.locationAvailable,
   });
+
+  /// Get effective extra_price for a crust at a given size.
+  /// Priority: size-specific > location/default (effectiveExtraPrice).
+  double getCrustPrice(CrustType crust, String sizeCode) {
+    final override = crustSizePricing.where((p) => 
+        p.crustId == crust.id && p.sizeCode.toLowerCase() == sizeCode.toLowerCase());
+    if (override.isNotEmpty) return override.first.extraPrice;
+    return crust.effectiveExtraPrice;
+  }
+
+  /// Get effective price for a topping at a given size.
+  /// Priority: size-specific > location/default (effectivePrice).
+  double getToppingPrice(Topping topping, String sizeCode) {
+    final override = toppingSizePricing.where((p) => 
+        p.toppingId == topping.id && p.sizeCode.toLowerCase() == sizeCode.toLowerCase());
+    if (override.isNotEmpty) return override.first.price;
+    return topping.effectivePrice;
+  }
 
   factory Product.fromJson(Map<String, dynamic> json) => Product(
         id: json['id'],
@@ -359,6 +412,14 @@ class Product {
             [],
         toppings: (json['toppings'] as List<dynamic>?)
                 ?.map((t) => Topping.fromJson(t))
+                .toList() ??
+            [],
+        crustSizePricing: (json['crust_size_pricing'] as List<dynamic>?)
+                ?.map((p) => CrustSizePricing.fromJson(p))
+                .toList() ??
+            [],
+        toppingSizePricing: (json['topping_size_pricing'] as List<dynamic>?)
+                ?.map((p) => ToppingSizePricing.fromJson(p))
                 .toList() ??
             [],
         locationAvailable: json['location_available'] != null
@@ -389,9 +450,9 @@ class CartItem {
 
   double get unitPrice {
     double price = size.effectivePrice;
-    if (crust != null) price += crust!.effectiveExtraPrice;
+    if (crust != null) price += product.getCrustPrice(crust!, size.sizeCode);
     for (final t in selectedToppings) {
-      price += t.effectivePrice;
+      price += product.getToppingPrice(t, size.sizeCode);
     }
     return price;
   }

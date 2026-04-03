@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../services/api_service.dart';
 import '../../widgets/widgets.dart';
 
 /// Opens PayU payment page in an in-app WebView.
@@ -8,8 +9,7 @@ import '../../widgets/widgets.dart';
 class PaymentWebView extends StatefulWidget {
   final Map<String, dynamic> payuParams;
   final String txnid;
-  const PaymentWebView(
-      {super.key, required this.payuParams, required this.txnid});
+  const PaymentWebView({super.key, required this.payuParams, required this.txnid});
 
   @override
   State<PaymentWebView> createState() => _PaymentWebViewState();
@@ -35,11 +35,9 @@ class _PaymentWebViewState extends State<PaymentWebView> {
 
     // Build auto-submit HTML form
     final sb = StringBuffer();
-    sb.write(
-        '<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>');
+    sb.write('<!DOCTYPE html><html><head><meta name="viewport" content="width=device-width, initial-scale=1.0"></head>');
     sb.write('<body onload="document.getElementById(\'payuForm\').submit();">');
-    sb.write(
-        '<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;">');
+    sb.write('<div style="display:flex;justify-content:center;align-items:center;height:100vh;font-family:sans-serif;">');
     sb.write('<p>Redirecting to payment gateway...</p></div>');
     sb.write('<form id="payuForm" method="post" action="$endpoint">');
     params.forEach((k, v) {
@@ -65,8 +63,7 @@ class _PaymentWebViewState extends State<PaymentWebView> {
           }
           // Handle non-HTTP schemes (upi://, phonepe://, gpay://, intent://, etc.)
           final uri = Uri.tryParse(request.url);
-          if (uri != null &&
-              !['http', 'https', 'about', 'data'].contains(uri.scheme)) {
+          if (uri != null && !['http', 'https', 'about', 'data'].contains(uri.scheme)) {
             launchUrl(uri, mode: LaunchMode.externalApplication);
             return NavigationDecision.prevent;
           }
@@ -92,8 +89,7 @@ class _PaymentWebViewState extends State<PaymentWebView> {
         'order_id': orderId,
         'order_number': uri.queryParameters['order_number'],
         'total': double.tryParse(uri.queryParameters['total'] ?? '0'),
-        'coins_redeemed':
-            int.tryParse(uri.queryParameters['coins_redeemed'] ?? '0'),
+        'coins_redeemed': int.tryParse(uri.queryParameters['coins_redeemed'] ?? '0'),
       });
     } else {
       // No order was created yet, so no need to call cancelOrder.
@@ -120,7 +116,8 @@ class _PaymentWebViewState extends State<PaymentWebView> {
         body: Stack(
           children: [
             WebViewWidget(controller: _controller),
-            if (_loading) const Center(child: PizzaSpinner(size: 40)),
+            if (_loading)
+              const Center(child: PizzaSpinner(size: 40)),
           ],
         ),
       ),
@@ -141,8 +138,7 @@ class _PaymentWebViewState extends State<PaymentWebView> {
             onPressed: () {
               Navigator.pop(ctx); // close dialog
               if (!mounted) return;
-              Navigator.pop(
-                  context, {'status': 'cancelled', 'txnid': widget.txnid});
+              Navigator.pop(context, {'status': 'cancelled', 'txnid': widget.txnid});
             },
             child: const Text('Exit', style: TextStyle(color: Colors.red)),
           ),

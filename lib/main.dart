@@ -37,7 +37,7 @@ void main() async {
   // Initialize local notifications + vibration
   await NotificationService.initialize(navKey: navigatorKey);
 
-  // Initialize ApiService before running the app
+  // Initialize ApiService FIRST before running the app
   await ApiService.init();
 
   runApp(const PizzaHapApp());

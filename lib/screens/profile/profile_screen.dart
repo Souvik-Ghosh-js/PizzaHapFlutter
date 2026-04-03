@@ -100,10 +100,8 @@ class _ProfileScreenState extends State<ProfileScreen>
                   Navigator.pop(context);
                   // Clear persisted location on logout
                   final prefs = await SharedPreferences.getInstance();
-                  if (!mounted) return;
                   await prefs.remove('selected_location_id');
                   await prefs.remove('selected_location_name');
-                  if (!mounted) return;
                   context.read<CartProvider>().clear();
                   await context.read<AuthProvider>().logout();
                   if (mounted) {

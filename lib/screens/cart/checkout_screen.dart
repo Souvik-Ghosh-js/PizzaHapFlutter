@@ -246,11 +246,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void _toggleCoins(bool val, CartProvider cart, int coinBalance) {
     setState(() => _useCoins = val);
     if (val) {
-      final maxRedeem = coinBalance.clamp(
-        0,
-        (cart.subtotal - cart.discount + cart.deliveryFee).floor(),
-      );
-      cart.setCoinsToRedeem(maxRedeem);
+      cart.setCoinsToRedeem(coinBalance);
     } else {
       cart.setCoinsToRedeem(0);
     }
@@ -269,7 +265,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       });
     }
 
-    final coinsOff = _useCoins ? cart.coinsToRedeem.toDouble() : 0.0;
+    final coinsOff = _useCoins ? cart.coinsDiscount : 0.0;
     final finalTotal =
         (cart.subtotal - cart.discount - coinsOff + cart.deliveryFee)
             .clamp(0.0, double.infinity);
@@ -471,16 +467,20 @@ class _CoinRedemptionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final canRedeem = coinBalance > 0;
+    final cart = context.watch<CartProvider>();
+    final subtotal = cart.subtotal;
+    final isMinOrder = subtotal > 300;
+    final canRedeem = coinBalance > 0 && isMinOrder;
+
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: useCoins
+          color: (useCoins && isMinOrder)
               ? const Color(AppColors.coins).withValues(alpha: 0.6)
               : Colors.grey.shade100,
-          width: useCoins ? 1.5 : 1,
+          width: (useCoins && isMinOrder) ? 1.5 : 1,
         ),
         boxShadow: [
           BoxShadow(
@@ -514,9 +514,11 @@ class _CoinRedemptionCard extends StatelessWidget {
                         style: TextStyle(
                             fontWeight: FontWeight.w800, fontSize: 14)),
                     Text(
-                      canRedeem
-                          ? 'You have $coinBalance coins = ₹$coinBalance'
-                          : 'No coins yet — earn 1 coin per ₹10 spent',
+                      !isMinOrder
+                          ? 'Min. order ₹300 required to redeem'
+                          : (coinBalance > 0
+                              ? 'You have $coinBalance coins = ₹${(coinBalance * 0.5).toStringAsFixed(0)}'
+                              : 'No coins yet — earn 1 coin per ₹10 spent'),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight:
@@ -558,7 +560,7 @@ class _CoinRedemptionCard extends StatelessWidget {
                                 color: Color(AppColors.coins),
                                 fontSize: 13)),
                       ]),
-                      Text('- ₹$coinsToRedeem',
+                      Text('- ₹${(coinsToRedeem * 0.5).toStringAsFixed(2)}',
                           style: const TextStyle(
                               fontWeight: FontWeight.w800,
                               color: Color(AppColors.coins),

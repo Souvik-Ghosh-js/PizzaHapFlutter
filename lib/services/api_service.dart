@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../config/app_config.dart';
 import '../models/models.dart';
 
 void _log(String message, {bool isError = false}) {
+  // ignore: avoid_print
   debugPrint('${isError ? '[ERROR]' : '[API]'}: $message');
 }
 
@@ -48,8 +50,10 @@ Future<T> _safeRequest<T>(Future<T> Function() fn) async {
   }
 }
 
+
 class ApiService {
   static SharedPreferences? _prefs;
+  static const _storage = FlutterSecureStorage();
   static String? _accessToken;
   static String? _refreshToken;
   static bool _isInitialized = false;
@@ -64,8 +68,10 @@ class ApiService {
     }
 
     _prefs ??= await SharedPreferences.getInstance();
-    _accessToken = _prefs?.getString('access_token');
-    _refreshToken = _prefs?.getString('refresh_token');
+
+    // Tokens prefer SecureStorage but check SharedPreferences to migrate if needed
+    _accessToken = await _storage.read(key: 'access_token');
+    _refreshToken = await _storage.read(key: 'refresh_token');
 
     _log('=== INIT DEBUG ===');
     _log('Access token exists: ${_accessToken != null}');
@@ -77,62 +83,69 @@ class ApiService {
     _log('isLoggedIn: ${isLoggedIn}');
     _log('==================');
 
+    // Migration logic: if tokens in prefs but not in secure storage
+    if (_accessToken == null) {
+      _accessToken = _prefs?.getString('access_token');
+      _refreshToken = _prefs?.getString('refresh_token');
+      if (_accessToken != null && _refreshToken != null) {
+        await _storage.write(key: 'access_token', value: _accessToken);
+        await _storage.write(key: 'refresh_token', value: _refreshToken);
+        await _prefs?.remove('access_token');
+        await _prefs?.remove('refresh_token');
+        _log('Tokens migrated to SecureStorage');
+      }
+    }
+
     _isInitialized = true;
   }
-
   static Future<void> saveTokens(String access, String refresh) async {
-    _log('=== SAVE TOKENS ===');
-    _log('Access token length: ${access.length}');
-    _log('Refresh token length: ${refresh.length}');
-
     _accessToken = access;
     _refreshToken = refresh;
-    _prefs ??= await SharedPreferences.getInstance();
-
-    await _prefs?.setString('access_token', access);
-    await _prefs?.setString('refresh_token', refresh);
-
-    // Verify they were saved
-    final savedAccess = _prefs?.getString('access_token');
-    final savedRefresh = _prefs?.getString('refresh_token');
-    _log('Verified saved - Access: ${savedAccess != null}, Refresh: ${savedRefresh != null}');
-    _log('==================');
+    await _storage.write(key: 'access_token', value: access);
+    await _storage.write(key: 'refresh_token', value: refresh);
+    _log('Tokens saved successfully to SecureStorage');
   }
-
-  static Future<void> clearTokens() async {
-    _log('=== CLEAR TOKENS ===');
-    _accessToken = null;
-    _refreshToken = null;
-    _prefs ??= await SharedPreferences.getInstance();
-    await _prefs?.remove('access_token');
-    await _prefs?.remove('refresh_token');
-    _log('Tokens cleared successfully');
-    _log('==================');
-  }
-
-  static bool get isLoggedIn {
-    final loggedIn = _accessToken != null;
-    _log('isLoggedIn check: $loggedIn (token exists: ${_accessToken != null})');
-    return loggedIn;
-  }
-
-  // Add a method to manually restore session (call this after app resumes)
   static Future<bool> restoreSession() async {
     _log('=== RESTORE SESSION ===');
-    _prefs ??= await SharedPreferences.getInstance();
-    final savedAccess = _prefs?.getString('access_token');
-    final savedRefresh = _prefs?.getString('refresh_token');
+    if (!_isInitialized) {
+      await init();
+    }
 
-    if (savedAccess != null && savedRefresh != null) {
-      _accessToken = savedAccess;
-      _refreshToken = savedRefresh;
+    final hasAccessToken = _accessToken != null;
+    final hasRefreshToken = _refreshToken != null;
+
+    _log('Access token exists: $hasAccessToken');
+    _log('Refresh token exists: $hasRefreshToken');
+
+    if (hasAccessToken && hasRefreshToken) {
       _log('Session restored successfully');
-      _log('Access token exists: true');
       return true;
     }
+
+    // Try to read directly from secure storage as fallback
+    final directAccess = await _storage.read(key: 'access_token');
+    final directRefresh = await _storage.read(key: 'refresh_token');
+
+    if (directAccess != null && directRefresh != null) {
+      _accessToken = directAccess;
+      _refreshToken = directRefresh;
+      _log('Session restored directly from secure storage');
+      return true;
+    }
+
     _log('No saved session found');
     return false;
   }
+  static Future<void> clearTokens() async {
+    _accessToken = null;
+    _refreshToken = null;
+    await _storage.delete(key: 'access_token');
+    await _storage.delete(key: 'refresh_token');
+    _log('Tokens cleared from SecureStorage');
+  }
+
+  static bool get isLoggedIn => _accessToken != null;
+  static String? get accessToken => _accessToken;
 
   static Map<String, String> get _headers => {
     'Content-Type': 'application/json',
@@ -141,7 +154,7 @@ class ApiService {
 
   static Future<Map<String, dynamic>> _handleResponse(http.Response response) async {
     _log('Response ${response.statusCode}: ${response.request?.url.path}');
-
+    
     // Check if unauthorized
     if (response.statusCode == 401 && _refreshToken != null) {
       _log('401 detected. Attempting token refresh...');
@@ -169,7 +182,7 @@ class ApiService {
     return body;
   }
 
-  // Synchronized refresh: if multiple calls trigger refresh simultaneously,
+  // Synchronized refresh: if multiple calls trigger refresh simultaneously, 
   // only one actually goes to the server.
   static Future<bool> _doRefresh() async {
     if (_refreshFuture != null) return await _refreshFuture!;
@@ -189,19 +202,13 @@ class ApiService {
       final response = await http.post(
         Uri.parse('${AppConfig.baseUrl}${AppStrings.refreshToken}'),
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'refreshToken': _refreshToken, 'refresh_token': _refreshToken}),
+        body: jsonEncode({'refreshToken': _refreshToken}),
       ).timeout(const Duration(seconds: 15));
 
       final body = jsonDecode(response.body);
       if (body['success'] == true) {
-        final newAccess = body['data']['accessToken'] ?? body['data']['access_token'] ?? '';
-        final newRefresh = body['data']['refreshToken'] ?? body['data']['refresh_token'] ?? '';
-        if (newAccess.isNotEmpty) {
-          await saveTokens(newAccess, newRefresh);
-          return true;
-        } else {
-          _log('Refresh failed: No tokens in response', isError: true);
-        }
+        await saveTokens(body['data']['accessToken'], body['data']['refreshToken']);
+        return true;
       } else {
         _log('Refresh rejected by server: ${body['message']}', isError: true);
         // If server explicitly rejects (401/400), clear everything
@@ -239,16 +246,16 @@ class ApiService {
 
   static Future<AuthResponse> register(String name, String email, String otp, {String? mobile}) =>
       _safeRequest(() async {
-        final response = await http.post(
-          Uri.parse('${AppConfig.baseUrl}${AppStrings.register}'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({'name': name, 'email': email, 'otp': otp, if (mobile != null) 'mobile': mobile}),
-        ).timeout(AppConfig.connectTimeout);
-        final body = await _handleResponse(response);
-        final auth = AuthResponse.fromJson(body['data']);
-        await saveTokens(auth.accessToken, auth.refreshToken);
-        return auth;
-      });
+    final response = await http.post(
+      Uri.parse('${AppConfig.baseUrl}${AppStrings.register}'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'name': name, 'email': email, 'otp': otp, if (mobile != null) 'mobile': mobile}),
+    ).timeout(AppConfig.connectTimeout);
+    final body = await _handleResponse(response);
+    final auth = AuthResponse.fromJson(body['data']);
+    await saveTokens(auth.accessToken, auth.refreshToken);
+    return auth;
+  });
 
   static Future<AuthResponse> login(String email, String otp) => _safeRequest(() async {
     final response = await http.post(
@@ -328,7 +335,7 @@ class ApiService {
   // ─── BANNERS ──────────────────────────────────────────────────────
 
   static Future<List<PromoBanner>> getBanners() => _safeRequest(() async {
-    const url = '${AppConfig.baseUrl}${AppStrings.banners}';
+    final url = '${AppConfig.baseUrl}${AppStrings.banners}';
     final response = await http.get(Uri.parse(url), headers: _headers).timeout(AppConfig.connectTimeout);
     final body = jsonDecode(response.body);
     if (response.statusCode == 200 && body['data'] != null) {
@@ -406,9 +413,9 @@ class ApiService {
   // ─── ORDERS ─────────────────────────────────────────────────────────
 
   static Future<OrderCalculation> calculateOrder(
-      List<Map<String, dynamic>> items, {
-        String? couponCode, String deliveryType = 'delivery', int coinsToRedeem = 0,
-      }) => _safeRequest(() async {
+    List<Map<String, dynamic>> items, {
+    String? couponCode, String deliveryType = 'delivery', int coinsToRedeem = 0,
+  }) => _safeRequest(() async {
     final response = await http.post(
       Uri.parse('${AppConfig.baseUrl}${AppStrings.calculateOrder}'),
       headers: _headers,
@@ -525,27 +532,27 @@ class ApiService {
 
   static Future<dynamic> createPaymentOrder(int orderId, String paymentMethod) =>
       _safeRequest(() async {
-        final response = await http.post(
-          Uri.parse('${AppConfig.baseUrl}${AppStrings.createPayment}'),
-          headers: _headers,
-          body: jsonEncode({'order_id': orderId, 'payment_method': paymentMethod}),
-        ).timeout(AppConfig.connectTimeout);
-        final body = await _handleResponse(response);
-        return body['data'];
-      });
+    final response = await http.post(
+      Uri.parse('${AppConfig.baseUrl}${AppStrings.createPayment}'),
+      headers: _headers,
+      body: jsonEncode({'order_id': orderId, 'payment_method': paymentMethod}),
+    ).timeout(AppConfig.connectTimeout);
+    final body = await _handleResponse(response);
+    return body['data'];
+  });
 
   /// Initiate online payment — validates order data and returns PayU params
   /// without creating an order in the DB.
   static Future<dynamic> initiateOnlinePayment(Map<String, dynamic> orderData) =>
       _safeRequest(() async {
-        final response = await http.post(
-          Uri.parse('${AppConfig.baseUrl}${AppStrings.initiatePayment}'),
-          headers: _headers,
-          body: jsonEncode(orderData),
-        ).timeout(AppConfig.connectTimeout);
-        final body = await _handleResponse(response);
-        return body['data'];
-      });
+    final response = await http.post(
+      Uri.parse('${AppConfig.baseUrl}${AppStrings.initiatePayment}'),
+      headers: _headers,
+      body: jsonEncode(orderData),
+    ).timeout(AppConfig.connectTimeout);
+    final body = await _handleResponse(response);
+    return body['data'];
+  });
 
   // ─── NOTIFICATIONS ──────────────────────────────────────────────────
 
@@ -582,14 +589,14 @@ class ApiService {
 
   static Future<Map<String, dynamic>> createTicket(Map<String, dynamic> data) =>
       _safeRequest(() async {
-        final response = await http.post(
-          Uri.parse('${AppConfig.baseUrl}${AppStrings.supportTickets}'),
-          headers: _headers,
-          body: jsonEncode(data),
-        ).timeout(AppConfig.connectTimeout);
-        final body = await _handleResponse(response);
-        return body['data'];
-      });
+    final response = await http.post(
+      Uri.parse('${AppConfig.baseUrl}${AppStrings.supportTickets}'),
+      headers: _headers,
+      body: jsonEncode(data),
+    ).timeout(AppConfig.connectTimeout);
+    final body = await _handleResponse(response);
+    return body['data'];
+  });
 
   static Future<List<SupportTicket>> getTickets({String? status}) => _safeRequest(() async {
     var url = '${AppConfig.baseUrl}${AppStrings.supportTickets}';
@@ -641,12 +648,12 @@ class ApiService {
 
   static Future<void> submitRating(int orderId, int productId, int rating, {String? review}) =>
       _safeRequest(() async {
-        final response = await http.post(
-          Uri.parse('${AppConfig.baseUrl}${AppStrings.ratings}'),
-          headers: _headers,
-          body: jsonEncode({'order_id': orderId, 'product_id': productId, 'rating': rating,
-            if (review != null) 'review': review}),
-        ).timeout(AppConfig.connectTimeout);
-        await _handleResponse(response);
-      });
+    final response = await http.post(
+      Uri.parse('${AppConfig.baseUrl}${AppStrings.ratings}'),
+      headers: _headers,
+      body: jsonEncode({'order_id': orderId, 'product_id': productId, 'rating': rating,
+        if (review != null) 'review': review}),
+    ).timeout(AppConfig.connectTimeout);
+    await _handleResponse(response);
+  });
 }

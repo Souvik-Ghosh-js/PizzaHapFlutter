@@ -156,7 +156,7 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                 shown.add(widget.order.id.toString());
                 await prefs.setStringList('dismissed_review_ids', shown);
               }
-              if (!context.mounted) return;
+              if (!mounted) return;
               Navigator.pop(context);
             },
             child: const Text('Maybe Later')),
@@ -187,17 +187,17 @@ class _FeedbackDialogState extends State<FeedbackDialog> {
                 shown.add(widget.order.id.toString());
                 await prefs.setStringList('dismissed_review_ids', shown);
               }
-              if (!context.mounted) return;
+              if (!mounted) return;
               Navigator.pop(context);
               _showThankYouAnimation();
               if (widget.onSuccess != null) widget.onSuccess!();
             } on ApiException catch (e) {
-              if (context.mounted) {
+              if (mounted) {
                 setState(() => _loading = false);
                 AppToast.error(context, e.message);
               }
             } catch (e) {
-              if (context.mounted) {
+              if (mounted) {
                 setState(() => _loading = false);
                 AppToast.error(context, e.toString());
               }

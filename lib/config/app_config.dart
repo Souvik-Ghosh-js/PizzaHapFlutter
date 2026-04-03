@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 
 class AppConfig {
   static const String baseUrl = 'https://api.gobt.in/api';

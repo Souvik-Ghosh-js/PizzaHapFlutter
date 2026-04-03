@@ -61,22 +61,17 @@ class _SplashScreenState extends State<SplashScreen>
     await Future.delayed(const Duration(milliseconds: 1800));
     if (!mounted) return;
 
-    print('Checking AuthProvider initialization...');
+    // Initialize auth provider
     final auth = context.read<AuthProvider>();
 
-    // Wait for auth to be initialized if not already
+    // Wait for auth to be initialized
     if (!auth.isInitialized) {
-      print('AuthProvider not initialized yet, waiting...');
+      print('Waiting for AuthProvider to initialize...');
       await Future.delayed(const Duration(milliseconds: 500));
     }
 
-    // Verify tokens are still present
     print('AuthProvider.isLoggedIn: ${auth.isLoggedIn}');
     print('AuthProvider.user: ${auth.user != null}');
-
-    // Double-check tokens from shared preferences directly
-    final tokensExist = await ApiService.restoreSession();
-    print('Tokens exist in SharedPreferences: $tokensExist');
 
     if (!mounted) return;
 
@@ -99,7 +94,7 @@ class _SplashScreenState extends State<SplashScreen>
       statusBarIconBrightness: Brightness.dark,
     ));
 
-    // Check if user is logged in
+    // Check if user is logged in AND user object exists
     if (auth.isLoggedIn && auth.user != null) {
       print('User is logged in: ${auth.user!.name}');
       if (cart.selectedLocationId == null) {
