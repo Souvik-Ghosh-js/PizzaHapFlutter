@@ -26,20 +26,23 @@ import 'widgets/cors_banner.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 void main() async {
+  // 1. Ensure Flutter bindings are ready
   WidgetsFlutterBinding.ensureInitialized();
 
+  // 2. Setup system UI
   SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.dark,
   ));
 
-  // Initialize local notifications + vibration
-  await NotificationService.initialize(navKey: navigatorKey);
+  // 3. Kick off services in background (don't block runApp)
+  // This prevents the app from being stuck on the native splash screen
+  // if these services take too long or hang on specific devices.
+  NotificationService.initialize(navKey: navigatorKey).catchError((e) => debugPrint(e.toString()));
+  ApiService.init().catchError((e) => debugPrint(e.toString()));
 
-  // Initialize ApiService FIRST before running the app
-  await ApiService.init();
-
+  // 4. Run the app
   runApp(const PizzaHapApp());
 }
 

@@ -62,41 +62,40 @@ class ApiService {
   static Future<bool>? _refreshFuture;
 
   static Future<void> init() async {
-    if (_isInitialized) {
-      _log('ApiService already initialized');
-      return;
-    }
+    if (_isInitialized) return;
+    _isInitialized = true; // Set early to prevent multiple calls
 
-    _prefs ??= await SharedPreferences.getInstance();
+    try {
+      _prefs ??= await SharedPreferences.getInstance();
 
-    // Tokens prefer SecureStorage but check SharedPreferences to migrate if needed
-    _accessToken = await _storage.read(key: 'access_token');
-    _refreshToken = await _storage.read(key: 'refresh_token');
+      // Secure storage can hang on some Android devices if KeyStore is corrupted or busy.
+      // We wrap it in a timeout and catch errors.
+      _accessToken = await _storage.read(key: 'access_token')
+          .timeout(const Duration(seconds: 3), onTimeout: () => null);
+      _refreshToken = await _storage.read(key: 'refresh_token')
+          .timeout(const Duration(seconds: 3), onTimeout: () => null);
 
-    _log('=== INIT DEBUG ===');
-    _log('Access token exists: ${_accessToken != null}');
-    if (_accessToken != null) {
-      _log('Access token prefix: ${_accessToken!.substring(0, _accessToken!.length > 10 ? 10 : _accessToken!.length)}...');
-      _log('Access token length: ${_accessToken!.length}');
-    }
-    _log('Refresh token exists: ${_refreshToken != null}');
-    _log('isLoggedIn: ${isLoggedIn}');
-    _log('==================');
+      _log('=== INIT DEBUG ===');
+      _log('Access token exists: ${_accessToken != null}');
+      _log('isLoggedIn: $isLoggedIn');
 
-    // Migration logic: if tokens in prefs but not in secure storage
-    if (_accessToken == null) {
-      _accessToken = _prefs?.getString('access_token');
-      _refreshToken = _prefs?.getString('refresh_token');
-      if (_accessToken != null && _refreshToken != null) {
-        await _storage.write(key: 'access_token', value: _accessToken);
-        await _storage.write(key: 'refresh_token', value: _refreshToken);
-        await _prefs?.remove('access_token');
-        await _prefs?.remove('refresh_token');
-        _log('Tokens migrated to SecureStorage');
+      // Migration logic
+      if (_accessToken == null && _prefs != null) {
+        _accessToken = _prefs!.getString('access_token');
+        _refreshToken = _prefs!.getString('refresh_token');
+        if (_accessToken != null && _refreshToken != null) {
+          await _storage.write(key: 'access_token', value: _accessToken!);
+          await _storage.write(key: 'refresh_token', value: _refreshToken!);
+          await _prefs!.remove('access_token');
+          await _prefs!.remove('refresh_token');
+          _log('Tokens migrated to SecureStorage');
+        }
       }
+    } catch (e) {
+      _log('ApiService init error: $e', isError: true);
+      // If secure storage fails, we still proceed as unauthenticated
+      _isInitialized = true;
     }
-
-    _isInitialized = true;
   }
   static Future<void> saveTokens(String access, String refresh) async {
     _accessToken = access;

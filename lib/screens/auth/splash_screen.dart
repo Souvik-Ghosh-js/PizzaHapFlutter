@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:provider/provider.dart';
 import '../../providers/providers.dart';
 import '../../services/api_service.dart';
@@ -22,6 +23,10 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   void initState() {
     super.initState();
+    
+    // 1. Remove native splash screen as soon as Flutter renders its first frame
+    FlutterNativeSplash.remove();
+
     // Force status bar dark icons on white bg
     SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -47,7 +52,7 @@ class _SplashScreenState extends State<SplashScreen>
 
   Future<void> _runSequence() async {
     if (!mounted) return;
-    // BG fades in instantly to cover the native splash
+    // BG fades in instantly to cover the native splash transition
     await _bgController.forward();
     if (!mounted) return;
     // Logo bounces in
@@ -55,61 +60,51 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Future<void> _init() async {
-    print('=== SPLASH SCREEN INIT ===');
+    debugPrint('=== SPLASH SCREEN INIT ===');
 
-    // Wait at least 1.8s so the animation is fully visible
-    await Future.delayed(const Duration(milliseconds: 1800));
-    if (!mounted) return;
+    try {
+      // 1. Wait at least 1.8s so the animation is fully visible
+      await Future.delayed(const Duration(milliseconds: 1800));
+      if (!mounted) return;
 
-    // Initialize auth provider
-    final auth = context.read<AuthProvider>();
-
-    // Wait for auth to be initialized
-    if (!auth.isInitialized) {
-      print('Waiting for AuthProvider to initialize...');
-      await Future.delayed(const Duration(milliseconds: 500));
-    }
-
-    print('AuthProvider.isLoggedIn: ${auth.isLoggedIn}');
-    print('AuthProvider.user: ${auth.user != null}');
-
-    if (!mounted) return;
-
-    // Restore persisted location for cart and menu
-    final cart = context.read<CartProvider>();
-    await cart.restoreLocation();
-    if (!mounted) return;
-
-    if (cart.selectedLocationId != null) {
-      context.read<MenuProvider>().setSelectedLocation(cart.selectedLocationId!);
-    }
-
-    // Give a small buffer after auth init
-    await Future.delayed(const Duration(milliseconds: 300));
-    if (!mounted) return;
-
-    // Restore normal status bar
-    SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-      statusBarColor: Colors.transparent,
-      statusBarIconBrightness: Brightness.dark,
-    ));
-
-    // Check if user is logged in AND user object exists
-    if (auth.isLoggedIn && auth.user != null) {
-      print('User is logged in: ${auth.user!.name}');
-      if (cart.selectedLocationId == null) {
-        print('No location selected, going to branch selection');
-        Navigator.pushReplacementNamed(context, '/branch-selection');
-      } else {
-        print('Location selected, going to home');
-        Navigator.pushReplacementNamed(context, '/home');
+      // 2. Wait for AuthProvider to finish its async init (ApiService.init + Session restore)
+      final auth = context.read<AuthProvider>();
+      
+      int waitMs = 0;
+      const maxWaitMs = 5000; // 5 seconds max wait
+      while (!auth.isInitialized && waitMs < maxWaitMs) {
+        debugPrint('Waiting for AuthProvider to initialize ($waitMs ms)...');
+        await Future.delayed(const Duration(milliseconds: 250));
+        waitMs += 250;
       }
-    } else {
-      print('User not logged in, going to login screen');
-      Navigator.pushReplacementNamed(context, '/login');
+
+      if (!mounted) return;
+
+      // 3. Restore persisted location
+      final cart = context.read<CartProvider>();
+      await cart.restoreLocation().timeout(const Duration(seconds: 2), onTimeout: () => null);
+      
+      if (cart.selectedLocationId != null) {
+        context.read<MenuProvider>().setSelectedLocation(cart.selectedLocationId!);
+      }
+
+      // 4. Final transition logic
+      if (auth.isLoggedIn && auth.user != null) {
+        if (cart.selectedLocationId == null) {
+          Navigator.pushReplacementNamed(context, '/branch-selection');
+        } else {
+          Navigator.pushReplacementNamed(context, '/home');
+        }
+      } else {
+        Navigator.pushReplacementNamed(context, '/login');
+      }
+    } catch (e) {
+      debugPrint('SplashScreen Error: $e');
+      // On any critical failure, fallback to login
+      if (mounted) Navigator.pushReplacementNamed(context, '/login');
     }
 
-    print('=== SPLASH SCREEN INIT COMPLETE ===');
+    debugPrint('=== SPLASH SCREEN INIT COMPLETE ===');
   }
 
   @override
