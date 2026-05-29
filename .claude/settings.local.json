@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Pizzahap/PizzaHap/**)"
+    ],
+    "additionalDirectories": [
+      "c:\\Pizzahap\\PizzaHap\\controllers"
+    ]
+  }
+}
