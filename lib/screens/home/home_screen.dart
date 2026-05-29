@@ -563,6 +563,7 @@ class _BannerCard extends StatelessWidget {
       _hexToColor(banner.gradientEnd),
     ];
     final icon = _iconMap[banner.iconName] ?? Icons.local_offer_rounded;
+    final hasImage = banner.imageUrl != null && banner.imageUrl!.isNotEmpty;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 8),
@@ -579,23 +580,46 @@ class _BannerCard extends StatelessWidget {
               offset: const Offset(0, 6)),
         ],
       ),
-      child: Stack(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(20),
+        child: Stack(
         clipBehavior: Clip.hardEdge,
         children: [
-          // BG circle
-          Positioned(
-            right: -30,
-            top: -30,
-            child: Container(
-              width: 150,
-              height: 150,
-              decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: Colors.white.withValues(alpha: 0.1)),
+          // Background image (overrides gradient) with a dark overlay for legibility
+          if (hasImage) ...[
+            Positioned.fill(
+              child: PizzaNetImage(url: banner.imageUrl, fit: BoxFit.cover),
             ),
-          ),
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.45),
+                      Colors.black.withValues(alpha: 0.25),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+          // BG circle (gradient banners only)
+          if (!hasImage)
+            Positioned(
+              right: -30,
+              top: -30,
+              child: Container(
+                width: 150,
+                height: 150,
+                decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: Colors.white.withValues(alpha: 0.1)),
+              ),
+            ),
           Padding(
-            padding: const EdgeInsets.fromLTRB(22, 18, 100, 18),
+            padding: EdgeInsets.fromLTRB(22, 18, hasImage ? 22 : 100, 18),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
@@ -627,14 +651,16 @@ class _BannerCard extends StatelessWidget {
               ],
             ),
           ),
-          Positioned(
-            right: 20,
-            top: 0,
-            bottom: 0,
-            child: Icon(icon,
-                color: Colors.white.withValues(alpha: 0.9), size: 72),
-          ),
+          if (!hasImage)
+            Positioned(
+              right: 20,
+              top: 0,
+              bottom: 0,
+              child: Icon(icon,
+                  color: Colors.white.withValues(alpha: 0.9), size: 72),
+            ),
         ],
+        ),
       ),
     );
   }

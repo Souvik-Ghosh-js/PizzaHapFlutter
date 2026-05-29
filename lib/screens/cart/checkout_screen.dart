@@ -15,7 +15,8 @@ class CheckoutScreen extends StatefulWidget {
 
 class _CheckoutScreenState extends State<CheckoutScreen> {
   String _deliveryType = 'delivery';
-  String _paymentMethod = 'cash_on_delivery';
+  // Online payment is the default / first-priority option.
+  String _paymentMethod = 'online';
   bool _placingOrder = false;
   bool _useCoins = false;
   bool _addressInitialized = false;
@@ -418,6 +419,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             title: 'Payment Method',
             child: Column(children: [
               _PaymentOption(
+                value: 'online',
+                selected: _paymentMethod,
+                title: 'Pay Online',
+                subtitle: 'UPI, Card, Net Banking · Recommended',
+                icon: Icons.account_balance_wallet_rounded,
+                onTap: () => setState(() => _paymentMethod = 'online'),
+              ),
+              const SizedBox(height: 8),
+              _PaymentOption(
                 value: 'cash_on_delivery',
                 selected: _paymentMethod,
                 title: 'Cash on Delivery',
@@ -425,15 +435,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
                 icon: Icons.money_rounded,
                 onTap: () =>
                     setState(() => _paymentMethod = 'cash_on_delivery'),
-              ),
-              const SizedBox(height: 8),
-              _PaymentOption(
-                value: 'online',
-                selected: _paymentMethod,
-                title: 'Online Payment',
-                subtitle: 'UPI, Card, Net Banking',
-                icon: Icons.account_balance_wallet_rounded,
-                onTap: () => setState(() => _paymentMethod = 'online'),
               ),
             ]),
           ),

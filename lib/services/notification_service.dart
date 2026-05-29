@@ -2,8 +2,10 @@ import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
 import 'package:provider/provider.dart';
+import '../models/models.dart';
 import '../providers/providers.dart';
 import '../config/app_config.dart';
 
@@ -57,13 +59,14 @@ class NotificationService {
     required String title,
     required String body,
     String? payload,
+    int? id,
   }) async {
     // Haptic vibration
     await _vibrate();
 
     try {
       await _plugin.show(
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        id ?? DateTime.now().millisecondsSinceEpoch ~/ 1000,
         title,
         body,
         NotificationDetails(
@@ -129,6 +132,62 @@ class NotificationService {
       payload: '$orderId',
     );
   }
+
+  // ── COD → "Pay now through UPI" reminders ─────────────────────────────────
+  // For cash-on-delivery orders that are still unpaid, nudge the customer to
+  // switch to UPI: once when the order is packed (status `preparing`) and twice
+  // when it is on the way (status `out_for_delivery`) — 3 reminders in total.
+  // Each reminder fires only once per order (persisted), so polling won't repeat
+  // them.
+  static const _upiTitle = 'Pay now through UPI';
+  static const _upiBody =
+      'Skip the cash — pay securely through UPI before your order arrives.';
+
+  static Future<void> maybeSendCodUpiReminders(Order order) async {
+    // Only nudge unpaid cash-on-delivery orders.
+    if (!order.isCOD || order.isPaid) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      if (order.status == 'preparing') {
+        // Packed → 1 reminder.
+        final key = 'cod_upi_${order.id}_packed';
+        if (prefs.getBool(key) ?? false) return;
+        await prefs.setBool(key, true);
+        await show(
+          title: _upiTitle,
+          body: 'Your order is packed! $_upiBody',
+          payload: '${order.id}',
+          id: _reminderId(order.id, 0),
+        );
+      } else if (order.status == 'out_for_delivery') {
+        // On the way → 2 reminders.
+        final key = 'cod_upi_${order.id}_otw';
+        if (prefs.getBool(key) ?? false) return;
+        await prefs.setBool(key, true);
+        await show(
+          title: _upiTitle,
+          body: 'Your order is on the way! $_upiBody',
+          payload: '${order.id}',
+          id: _reminderId(order.id, 1),
+        );
+        await Future.delayed(const Duration(seconds: 2));
+        await show(
+          title: _upiTitle,
+          body: 'Almost there — pay through UPI for a contactless handover.',
+          payload: '${order.id}',
+          id: _reminderId(order.id, 2),
+        );
+      }
+    } catch (e) {
+      debugPrint('COD UPI reminder error: $e');
+    }
+  }
+
+  // Stable, collision-free notification id per (order, reminder slot).
+  static int _reminderId(int orderId, int slot) =>
+      (orderId * 10 + slot) % 2147483647;
 
   static String _statusLabel(String status) {
     switch (status) {

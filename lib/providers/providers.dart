@@ -457,6 +457,11 @@ class OrderProvider extends ChangeNotifier {
       final all = result['orders'] as List<Order>;
       _refreshActiveOrder(all);
       notifyListeners();
+      // Nudge COD customers to pay via UPI as the order progresses.
+      final active = _activeOrder;
+      if (active != null) {
+        await NotificationService.maybeSendCodUpiReminders(active);
+      }
     } catch (_) {}
   }
 

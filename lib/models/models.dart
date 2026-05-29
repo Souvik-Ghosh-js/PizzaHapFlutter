@@ -178,6 +178,7 @@ class PromoBanner {
   final String gradientEnd;
   final String iconName;
   final int sortOrder;
+  final String? imageUrl;
 
   PromoBanner({
     required this.id,
@@ -187,6 +188,7 @@ class PromoBanner {
     required this.gradientEnd,
     required this.iconName,
     required this.sortOrder,
+    this.imageUrl,
   });
 
   factory PromoBanner.fromJson(Map<String, dynamic> json) => PromoBanner(
@@ -197,6 +199,7 @@ class PromoBanner {
         gradientEnd: json['gradient_end'] ?? '#FF6B35',
         iconName: json['icon_name'] ?? 'local_offer',
         sortOrder: json['sort_order'] ?? 0,
+        imageUrl: _buildImageUrl(json['image_url']),
       );
 }
 
