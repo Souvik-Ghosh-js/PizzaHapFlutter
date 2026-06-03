@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:pizzahap/services/api_service.dart';
 import 'package:provider/provider.dart';
 import 'providers/providers.dart';
 import 'utils/app_theme.dart';
@@ -36,11 +35,8 @@ void main() async {
     statusBarIconBrightness: Brightness.dark,
   ));
 
-  // 3. Kick off services in background (don't block runApp)
-  // This prevents the app from being stuck on the native splash screen
-  // if these services take too long or hang on specific devices.
+  // 3. Kick off notification service in background (doesn't affect auth)
   NotificationService.initialize(navKey: navigatorKey).catchError((e) => debugPrint(e.toString()));
-  ApiService.init().catchError((e) => debugPrint(e.toString()));
 
   // 4. Run the app
   runApp(const PizzaHapApp());

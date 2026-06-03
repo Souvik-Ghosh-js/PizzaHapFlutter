@@ -56,14 +56,19 @@ class ApiService {
   static const _storage = FlutterSecureStorage();
   static String? _accessToken;
   static String? _refreshToken;
-  static bool _isInitialized = false;
+
+  // Completer ensures all concurrent init() calls wait for the same single run
+  static Completer<void>? _initCompleter;
 
   // For locking simultaneous refresh calls
   static Future<bool>? _refreshFuture;
 
   static Future<void> init() async {
-    if (_isInitialized) return;
-    _isInitialized = true; // Set early to prevent multiple calls
+    if (_initCompleter != null) {
+      // Already running or done — wait for the same future
+      return _initCompleter!.future;
+    }
+    _initCompleter = Completer<void>();
 
     try {
       _prefs ??= await SharedPreferences.getInstance();
@@ -94,7 +99,8 @@ class ApiService {
     } catch (e) {
       _log('ApiService init error: $e', isError: true);
       // If secure storage fails, we still proceed as unauthenticated
-      _isInitialized = true;
+    } finally {
+      _initCompleter!.complete();
     }
   }
   static Future<void> saveTokens(String access, String refresh) async {
@@ -106,9 +112,7 @@ class ApiService {
   }
   static Future<bool> restoreSession() async {
     _log('=== RESTORE SESSION ===');
-    if (!_isInitialized) {
-      await init();
-    }
+    await init();
 
     final hasAccessToken = _accessToken != null;
     final hasRefreshToken = _refreshToken != null;

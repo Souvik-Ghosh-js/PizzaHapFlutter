@@ -88,8 +88,9 @@ class _SplashScreenState extends State<SplashScreen>
         context.read<MenuProvider>().setSelectedLocation(cart.selectedLocationId!);
       }
 
-      // 4. Final transition logic
-      if (auth.isLoggedIn && auth.user != null) {
+      // 4. Final transition logic — tokens exist means user is logged in,
+      // even if the profile fetch failed due to a network error.
+      if (auth.isLoggedIn) {
         if (cart.selectedLocationId == null) {
           Navigator.pushReplacementNamed(context, '/branch-selection');
         } else {
@@ -126,7 +127,7 @@ class _SplashScreenState extends State<SplashScreen>
           color: Colors.white,
           child: Center(
             child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 40),
+              padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 40),
               child: AnimatedBuilder(
                 animation: _logoController,
                 builder: (_, child) => Opacity(
