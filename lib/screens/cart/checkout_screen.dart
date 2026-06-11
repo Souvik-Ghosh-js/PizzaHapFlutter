@@ -21,6 +21,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   bool _useCoins = false;
   bool _addressInitialized = false;
 
+  final _nameCtrl = TextEditingController();
+  final _mobileCtrl = TextEditingController();
   final _houseCtrl = TextEditingController();
   final _townCtrl = TextEditingController();
   final _stateCtrl = TextEditingController();
@@ -49,6 +51,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
     // Pre-fill address from profile — only on first open
     if (!_addressInitialized) {
+      _nameCtrl.text = user.name;
+      _mobileCtrl.text = user.mobile ?? '';
       _houseCtrl.text = user.addressHouse ?? '';
       _townCtrl.text = user.addressTown ?? '';
       _stateCtrl.text = user.addressState ?? '';
@@ -61,6 +65,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   @override
   void dispose() {
+    _nameCtrl.dispose();
+    _mobileCtrl.dispose();
     _houseCtrl.dispose();
     _townCtrl.dispose();
     _stateCtrl.dispose();
@@ -70,6 +76,8 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   bool get _hasAddress =>
+      _nameCtrl.text.trim().isNotEmpty &&
+      _mobileCtrl.text.trim().isNotEmpty &&
       _houseCtrl.text.trim().isNotEmpty &&
       _townCtrl.text.trim().isNotEmpty &&
       _pincodeCtrl.text.trim().isNotEmpty;
@@ -128,6 +136,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       'location_id': cart.selectedLocationId,
       'delivery_type': _deliveryType,
       if (deliveryAddr != null) 'delivery_address': deliveryAddr,
+      if (_deliveryType == 'delivery') ...{
+        'contact_name': _nameCtrl.text.trim(),
+        'contact_mobile': _mobileCtrl.text.trim(),
+      },
       if (cart.couponCode != null) 'coupon_code': cart.couponCode,
       if (_instructionsCtrl.text.trim().isNotEmpty)
         'special_instructions': _instructionsCtrl.text.trim(),
@@ -337,6 +349,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               title: 'Delivery Address',
               subtitle: 'Saved to your profile',
               child: Column(children: [
+                TextFormField(
+                  controller: _nameCtrl,
+                  textCapitalization: TextCapitalization.words,
+                  decoration: const InputDecoration(
+                    labelText: 'Name *',
+                    hintText: 'John Doe',
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                TextFormField(
+                  controller: _mobileCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: const InputDecoration(
+                    labelText: 'Mobile Number *',
+                    hintText: '9876543210',
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 TextFormField(
                   controller: _houseCtrl,
                   decoration: const InputDecoration(
