@@ -185,6 +185,22 @@ class AuthProvider extends ChangeNotifier {
 
 // ─── CART PROVIDER ───────────────────────────────────────────────
 
+/// BOGO size ladder — covers both size_code conventions used by the backend
+/// ('regular'/'medium'/'large' and 'REG'/'MED'/'LG').
+int _sizeRank(String? code, String? name) {
+  const ranks = {
+    'small': 0, 'sm': 0, 's': 0, 'regular': 0, 'reg': 0, 'r': 0,
+    'medium': 1, 'med': 1, 'm': 1,
+    'large': 2, 'lg': 2, 'l': 2,
+  };
+  for (final v in [code, name]) {
+    if (v == null) continue;
+    final r = ranks[v.trim().toLowerCase()];
+    if (r != null) return r;
+  }
+  return -1;
+}
+
 class CartProvider extends ChangeNotifier {
   final List<CartItem> _items = [];
   String? _appliedCouponCode;
@@ -235,15 +251,38 @@ class CartProvider extends ChangeNotifier {
   double get discount {
     final coupon = _appliedCoupon;
     if (coupon == null) return 0.0;
-    if (coupon.isBogo) {
-      // BOGO: discount = price of the cheapest eligible item
-      final eligible = coupon.applicableProductIds.isEmpty
-          ? _items
-          : _items.where((i) => coupon.applicableProductIds.contains(i.product.id)).toList();
-      if (eligible.isEmpty) return 0.0;
-      return eligible.map((i) => i.unitPrice).reduce((a, b) => a < b ? a : b);
-    }
+    // BOGO adds a free smaller pizza (see bogoFreeItem) instead of cutting money
+    if (coupon.isBogo) return 0.0;
     return coupon.calculatedDiscount ?? 0.0;
+  }
+
+  /// BOGO reward: a smaller size of the priciest eligible pizza, free —
+  /// Large → Medium, Medium → Small, same crust & toppings.
+  /// Small sizes never trigger BOGO. Returns null if nothing qualifies.
+  CartItem? get bogoFreeItem {
+    final coupon = _appliedCoupon;
+    if (coupon == null || !coupon.isBogo) return null;
+    final eligible = (coupon.applicableProductIds.isEmpty
+            ? _items
+            : _items.where((i) => coupon.applicableProductIds.contains(i.product.id)))
+        .where((i) => _sizeRank(i.size.sizeCode, i.size.sizeName) >= 1)
+        .toList()
+      ..sort((a, b) => b.unitPrice.compareTo(a.unitPrice));
+    for (final trigger in eligible) {
+      final targetRank = _sizeRank(trigger.size.sizeCode, trigger.size.sizeName) - 1;
+      for (final s in trigger.product.sizes) {
+        if (s.isAvailable && _sizeRank(s.sizeCode, s.sizeName) == targetRank) {
+          return CartItem(
+            product: trigger.product,
+            size: s,
+            crust: trigger.crust,
+            selectedToppings: trigger.selectedToppings,
+            quantity: 1,
+          );
+        }
+      }
+    }
+    return null;
   }
   double get coinsDiscount => _coinsToRedeem * 0.5;
   // Backend has NO TAX — total = subtotal - discount - coins_discount + delivery_fee

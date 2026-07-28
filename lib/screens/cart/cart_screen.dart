@@ -49,7 +49,14 @@ class _CartScreenState extends State<CartScreen>
       if (!mounted) return;
       cart.applyCoupon(coupon);
       if (coupon.isBogo) {
-        AppToast.success(context, 'BOGO applied! Add one more item to get the cheapest one free!');
+        final free = cart.bogoFreeItem;
+        if (free != null) {
+          AppToast.success(context,
+              'BOGO applied! FREE ${free.size.sizeName} ${free.product.name} with your order!');
+        } else {
+          AppToast.success(context,
+              'BOGO applied! Add a Medium or Large pizza to get a smaller one free!');
+        }
       } else {
         AppToast.success(context, 'Coupon applied! You\'re saving!');
       }
@@ -421,7 +428,7 @@ class _CouponSection extends StatelessWidget {
                             fontSize: 14)),
                     Text(
                         appliedCoupon!.isBogo
-                            ? 'Buy 1 Get 1 Free applied!'
+                            ? 'Buy 1 Get 1 — smaller size FREE!'
                             : 'Saving ₹${appliedCoupon!.calculatedDiscount?.toStringAsFixed(0)}',
                         style: TextStyle(
                             fontSize: 12, color: Colors.grey.shade500)),
@@ -525,11 +532,32 @@ class _BillCard extends StatelessWidget {
         if (cart.discount > 0) ...[
           const SizedBox(height: 6),
           PriceRow(
-              label: cart.appliedCoupon?.isBogo == true
-                  ? 'BOGO Free Item'
-                  : 'Discount (${cart.appliedCoupon?.code ?? ''})',
+              label: 'Discount (${cart.appliedCoupon?.code ?? ''})',
               amount: -cart.discount,
               color: const Color(AppColors.success)),
+        ],
+        if (cart.bogoFreeItem != null) ...[
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(
+                child: Text(
+                  '🎁 ${cart.bogoFreeItem!.product.name} (${cart.bogoFreeItem!.size.sizeName})',
+                  style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Color(AppColors.success)),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const Text('FREE',
+                  style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Color(AppColors.success))),
+            ],
+          ),
         ],
         const SizedBox(height: 6),
         PriceRow(
