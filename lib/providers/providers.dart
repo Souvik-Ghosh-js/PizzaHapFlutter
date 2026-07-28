@@ -257,8 +257,9 @@ class CartProvider extends ChangeNotifier {
   }
 
   /// BOGO reward: a smaller size of the priciest eligible pizza, free —
-  /// Large → Medium, Medium → Small, same crust & toppings.
-  /// Small sizes never trigger BOGO. Returns null if nothing qualifies.
+  /// Large → Medium, Medium → Small. The free pizza is plain (no crust
+  /// addon, no toppings). Small sizes never trigger BOGO.
+  /// Returns null if nothing qualifies.
   CartItem? get bogoFreeItem {
     final coupon = _appliedCoupon;
     if (coupon == null || !coupon.isBogo) return null;
@@ -275,8 +276,6 @@ class CartProvider extends ChangeNotifier {
           return CartItem(
             product: trigger.product,
             size: s,
-            crust: trigger.crust,
-            selectedToppings: trigger.selectedToppings,
             quantity: 1,
           );
         }
