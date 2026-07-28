@@ -119,8 +119,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
 
     final orderProvider = context.read<OrderProvider>();
+    // Coins cannot be combined with a coupon
     final coinsToSend =
-        (_useCoins && cart.coinsToRedeem > 0) ? cart.coinsToRedeem : 0;
+        (_useCoins && cart.appliedCoupon == null && cart.coinsToRedeem > 0)
+            ? cart.coinsToRedeem
+            : 0;
 
     final deliveryAddr = _deliveryType == 'delivery'
         ? [
@@ -288,10 +291,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       });
     }
 
-    final coinsOff = _useCoins ? cart.coinsDiscount : 0.0;
-    final finalTotal =
-        (cart.subtotal - cart.discount - coinsOff + cart.deliveryFee)
-            .clamp(0.0, double.infinity);
+    final couponApplied = cart.appliedCoupon != null;
+    final coinsOff = (_useCoins && !couponApplied) ? cart.coinsDiscount : 0.0;
+    final finalTotal = (cart.subtotal +
+            cart.freeItemExtrasTotal -
+            cart.discount -
+            coinsOff +
+            cart.deliveryFee)
+        .clamp(0.0, double.infinity);
 
     return Scaffold(
       backgroundColor: const Color(AppColors.background),
@@ -445,7 +452,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           // ── Loyalty Coins ────────────────────────────────────────────
           _CoinRedemptionCard(
             coinBalance: coinBalance,
-            useCoins: _useCoins,
+            useCoins: _useCoins && !couponApplied,
             coinsToRedeem: cart.coinsToRedeem,
             finalTotal: finalTotal,
             onToggle: (val) => _toggleCoins(val, cart, coinBalance),
@@ -482,7 +489,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           // ── Bill Summary ─────────────────────────────────────────────
           _BillSummaryCard(
             cart: cart,
-            useCoins: _useCoins,
+            useCoins: _useCoins && !couponApplied,
             coinsOff: coinsOff,
             finalTotal: finalTotal,
           ),
@@ -521,7 +528,8 @@ class _CoinRedemptionCard extends StatelessWidget {
     final cart = context.watch<CartProvider>();
     final subtotal = cart.subtotal;
     final isMinOrder = subtotal > 300;
-    final canRedeem = coinBalance > 0 && isMinOrder;
+    final couponApplied = cart.appliedCoupon != null;
+    final canRedeem = coinBalance > 0 && isMinOrder && !couponApplied;
 
     return Container(
       decoration: BoxDecoration(
@@ -565,11 +573,13 @@ class _CoinRedemptionCard extends StatelessWidget {
                         style: TextStyle(
                             fontWeight: FontWeight.w800, fontSize: 14)),
                     Text(
-                      !isMinOrder
-                          ? 'Min. order ₹300 required to redeem'
-                          : (coinBalance > 0
-                              ? 'You have $coinBalance coins = ₹${(coinBalance * 0.5).toStringAsFixed(0)}'
-                              : 'No coins yet — earn 1 coin per ₹10 spent'),
+                      couponApplied
+                          ? "Coins can't be used with a coupon"
+                          : !isMinOrder
+                              ? 'Min. order ₹300 required to redeem'
+                              : (coinBalance > 0
+                                  ? 'You have $coinBalance coins = ₹${(coinBalance * 0.5).toStringAsFixed(0)}'
+                                  : 'No coins yet — earn 1 coin per ₹10 spent'),
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight:
@@ -687,6 +697,11 @@ class _BillSummaryCard extends StatelessWidget {
               label: 'Coupon (${cart.couponCode ?? ''})',
               amount: -cart.discount,
               color: const Color(AppColors.success)),
+        ],
+        if (cart.freeItemExtrasTotal > 0) ...[
+          const SizedBox(height: 8),
+          _SummaryRow(
+              label: 'Extras on free pizza', amount: cart.freeItemExtrasTotal),
         ],
         const SizedBox(height: 8),
         _SummaryRow(

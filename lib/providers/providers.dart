@@ -307,7 +307,9 @@ class CartProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  double get coinsDiscount => _coinsToRedeem * 0.5;
+  // Coins cannot be combined with a coupon (BOGO or any other)
+  double get coinsDiscount =>
+      _appliedCoupon != null ? 0.0 : _coinsToRedeem * 0.5;
   // Backend has NO TAX — total = subtotal - discount - coins_discount + delivery_fee
   double get tax => 0.0;
   double get total =>
@@ -371,6 +373,12 @@ class CartProvider extends ChangeNotifier {
   void setAvailableCoins(int coins) { _availableCoins = coins; notifyListeners(); }
 
   void setCoinsToRedeem(int coins) {
+    // Coins cannot be combined with a coupon
+    if (_appliedCoupon != null) {
+      _coinsToRedeem = 0;
+      notifyListeners();
+      return;
+    }
     // Clamp: can't redeem more coins than available, and can't exceed the payable amount
     // 1 coin = ₹0.50, so max coins = payable / 0.5 = payable * 2
     final maxByBalance = coins.clamp(0, _availableCoins);
@@ -385,6 +393,7 @@ class CartProvider extends ChangeNotifier {
     _appliedCoupon = coupon;
     _freeItemCrust = null;
     _freeItemToppings = [];
+    _coinsToRedeem = 0; // coins can't be combined with a coupon
     notifyListeners();
   }
 
