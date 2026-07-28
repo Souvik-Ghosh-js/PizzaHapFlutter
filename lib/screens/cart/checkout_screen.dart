@@ -141,6 +141,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
         'contact_mobile': _mobileCtrl.text.trim(),
       },
       if (cart.couponCode != null) 'coupon_code': cart.couponCode,
+      // Payable extras chosen for the BOGO free pizza — priced by the server
+      if (cart.bogoFreeItem != null && cart.freeItemCrust != null)
+        'free_item_crust_id': cart.freeItemCrust!.id,
+      if (cart.bogoFreeItem != null && cart.freeItemToppings.isNotEmpty)
+        'free_item_toppings': cart.freeItemToppings.map((t) => t.id).toList(),
       if (_instructionsCtrl.text.trim().isNotEmpty)
         'special_instructions': _instructionsCtrl.text.trim(),
       'payment_method': _paymentMethod,

@@ -558,6 +558,29 @@ class _BillCard extends StatelessWidget {
                       color: Color(AppColors.success))),
             ],
           ),
+          if (cart.freeItemExtrasTotal > 0) ...[
+            const SizedBox(height: 6),
+            PriceRow(
+                label: 'Extras on free pizza', amount: cart.freeItemExtrasTotal),
+          ],
+          const SizedBox(height: 4),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: GestureDetector(
+              onTap: () => showFreeItemExtrasSheet(context, cart),
+              child: Text(
+                cart.freeItemCrust == null && cart.freeItemToppings.isEmpty
+                    ? '+ Add crust/toppings to free pizza (payable)'
+                    : 'Edit free pizza extras',
+                style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(AppColors.primary),
+                    decoration: TextDecoration.underline,
+                    decorationColor: Color(AppColors.primary)),
+              ),
+            ),
+          ),
         ],
         const SizedBox(height: 6),
         PriceRow(
@@ -578,4 +601,138 @@ class _BillCard extends StatelessWidget {
       ]),
     );
   }
+}
+
+/// Bottom sheet to pick payable extras (crust addon / toppings) for the
+/// BOGO free pizza. The base pizza stays free; only extras are charged.
+void showFreeItemExtrasSheet(BuildContext context, CartProvider cart) {
+  final free = cart.bogoFreeItem;
+  if (free == null) return;
+  final product = free.product;
+  final sizeCode = free.size.sizeCode;
+  CrustType? crust = cart.freeItemCrust;
+  final selected = List<Topping>.from(cart.freeItemToppings);
+
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.white,
+    shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    builder: (ctx) => StatefulBuilder(builder: (ctx, setSheet) {
+      double extrasTotal() {
+        double t = 0;
+        if (crust != null) t += product.getCrustPrice(crust!, sizeCode);
+        for (final tp in selected) {
+          t += product.getToppingPrice(tp, sizeCode);
+        }
+        return t;
+      }
+
+      final crusts =
+          product.crusts.where((c) => c.isAvailable).toList();
+      final toppings =
+          product.toppings.where((t) => t.isAvailable).toList();
+
+      return SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.75),
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                        'Extras for your FREE ${free.size.sizeName} ${product.name}',
+                        style: const TextStyle(
+                            fontWeight: FontWeight.w800, fontSize: 16)),
+                    const SizedBox(height: 4),
+                    Text(
+                        'The pizza itself is free — extras below are charged.',
+                        style: TextStyle(
+                            fontSize: 12, color: Colors.grey.shade600)),
+                  ]),
+            ),
+            Flexible(
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                children: [
+                  if (crusts.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(12, 10, 12, 0),
+                      child: Text('Crust',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 13)),
+                    ),
+                    RadioListTile<int?>(
+                      dense: true,
+                      value: null,
+                      groupValue: crust?.id,
+                      onChanged: (_) => setSheet(() => crust = null),
+                      title: const Text('Regular crust (Free)',
+                          style: TextStyle(fontSize: 13)),
+                    ),
+                    ...crusts.map((c) => RadioListTile<int?>(
+                          dense: true,
+                          value: c.id,
+                          groupValue: crust?.id,
+                          onChanged: (_) => setSheet(() => crust = c),
+                          title: Text(
+                              '${c.name}  +₹${product.getCrustPrice(c, sizeCode).toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 13)),
+                        )),
+                  ],
+                  if (toppings.isNotEmpty) ...[
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(12, 10, 12, 0),
+                      child: Text('Toppings',
+                          style: TextStyle(
+                              fontWeight: FontWeight.w700, fontSize: 13)),
+                    ),
+                    ...toppings.map((t) => CheckboxListTile(
+                          dense: true,
+                          controlAffinity: ListTileControlAffinity.leading,
+                          value: selected.any((s) => s.id == t.id),
+                          onChanged: (v) => setSheet(() {
+                            selected.removeWhere((s) => s.id == t.id);
+                            if (v == true) selected.add(t);
+                          }),
+                          title: Text(
+                              '${t.name}  +₹${product.getToppingPrice(t, sizeCode).toStringAsFixed(0)}',
+                              style: const TextStyle(fontSize: 13)),
+                        )),
+                  ],
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              child: Row(children: [
+                Expanded(
+                  child: Text(
+                    extrasTotal() > 0
+                        ? 'Extras: ₹${extrasTotal().toStringAsFixed(0)}'
+                        : 'No extras',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 15),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    cart.setFreeItemExtras(crust, selected);
+                    Navigator.pop(ctx);
+                  },
+                  child: const Text('Apply',
+                      style: TextStyle(fontWeight: FontWeight.w700)),
+                ),
+              ]),
+            ),
+          ]),
+        ),
+      );
+    }),
+  );
 }

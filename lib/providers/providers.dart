@@ -220,6 +220,10 @@ class CartProvider extends ChangeNotifier {
   int _coinsToRedeem = 0;
   int _availableCoins = 0;
 
+  // Payable extras the user picked for the BOGO free pizza
+  CrustType? _freeItemCrust;
+  List<Topping> _freeItemToppings = [];
+
   List<CartItem> get items => List.unmodifiable(_items);
   String? get couponCode => _appliedCouponCode;
   Coupon? get appliedCoupon => _appliedCoupon;
@@ -247,7 +251,8 @@ class CartProvider extends ChangeNotifier {
       && _addressPincode != null && _addressPincode!.isNotEmpty;
 
   double get subtotal => _items.fold(0.0, (sum, item) => sum + item.totalPrice);
-  double get deliveryFee => _deliveryType == 'pickup' ? 0 : (subtotal < 300 ? 40 : 0);
+  double get deliveryFee =>
+      _deliveryType == 'pickup' ? 0 : ((subtotal + freeItemExtrasTotal) < 300 ? 40 : 0);
   double get discount {
     final coupon = _appliedCoupon;
     if (coupon == null) return 0.0;
@@ -257,9 +262,9 @@ class CartProvider extends ChangeNotifier {
   }
 
   /// BOGO reward: a smaller size of the priciest eligible pizza, free —
-  /// Large → Medium, Medium → Small. The free pizza is plain (no crust
-  /// addon, no toppings). Small sizes never trigger BOGO.
-  /// Returns null if nothing qualifies.
+  /// Large → Medium, Medium → Small. The base pizza is free; crust addons
+  /// and toppings the user picks for it are payable (freeItemExtrasTotal).
+  /// Small sizes never trigger BOGO. Returns null if nothing qualifies.
   CartItem? get bogoFreeItem {
     final coupon = _appliedCoupon;
     if (coupon == null || !coupon.isBogo) return null;
@@ -276,6 +281,8 @@ class CartProvider extends ChangeNotifier {
           return CartItem(
             product: trigger.product,
             size: s,
+            crust: _freeItemCrust,
+            selectedToppings: _freeItemToppings,
             quantity: 1,
           );
         }
@@ -283,10 +290,29 @@ class CartProvider extends ChangeNotifier {
     }
     return null;
   }
+
+  CrustType? get freeItemCrust => _freeItemCrust;
+  List<Topping> get freeItemToppings => List.unmodifiable(_freeItemToppings);
+
+  /// What the user pays for extras on the BOGO free pizza (base pizza is free).
+  double get freeItemExtrasTotal {
+    final f = bogoFreeItem;
+    if (f == null) return 0.0;
+    return f.unitPrice - f.size.effectivePrice;
+  }
+
+  void setFreeItemExtras(CrustType? crust, List<Topping> toppings) {
+    _freeItemCrust = crust;
+    _freeItemToppings = List.of(toppings);
+    notifyListeners();
+  }
+
   double get coinsDiscount => _coinsToRedeem * 0.5;
   // Backend has NO TAX — total = subtotal - discount - coins_discount + delivery_fee
   double get tax => 0.0;
-  double get total => (subtotal - discount - coinsDiscount + deliveryFee).clamp(0.0, double.infinity);
+  double get total =>
+      (subtotal + freeItemExtrasTotal - discount - coinsDiscount + deliveryFee)
+          .clamp(0.0, double.infinity);
 
   bool get isEmpty => _items.isEmpty;
 
@@ -348,7 +374,7 @@ class CartProvider extends ChangeNotifier {
     // Clamp: can't redeem more coins than available, and can't exceed the payable amount
     // 1 coin = ₹0.50, so max coins = payable / 0.5 = payable * 2
     final maxByBalance = coins.clamp(0, _availableCoins);
-    final payable = (subtotal - discount + deliveryFee);
+    final payable = (subtotal + freeItemExtrasTotal - discount + deliveryFee);
     final maxCoinsByPayable = (payable / 0.5).floor();
     _coinsToRedeem = maxByBalance.clamp(0, maxCoinsByPayable);
     notifyListeners();
@@ -357,12 +383,16 @@ class CartProvider extends ChangeNotifier {
   void applyCoupon(Coupon coupon) {
     _appliedCouponCode = coupon.code;
     _appliedCoupon = coupon;
+    _freeItemCrust = null;
+    _freeItemToppings = [];
     notifyListeners();
   }
 
   void removeCoupon() {
     _appliedCouponCode = null;
     _appliedCoupon = null;
+    _freeItemCrust = null;
+    _freeItemToppings = [];
     notifyListeners();
   }
 
@@ -373,6 +403,8 @@ class CartProvider extends ChangeNotifier {
     _items.clear();
     _appliedCouponCode = null;
     _appliedCoupon = null;
+    _freeItemCrust = null;
+    _freeItemToppings = [];
     _coinsToRedeem = 0;
     _addressHouse = null;
     _addressTown = null;
