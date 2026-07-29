@@ -53,7 +53,12 @@ Future<T> _safeRequest<T>(Future<T> Function() fn) async {
 
 class ApiService {
   static SharedPreferences? _prefs;
-  static const _storage = FlutterSecureStorage();
+  // encryptedSharedPreferences uses Jetpack's EncryptedSharedPreferences instead of the
+  // legacy Keystore mode, which is much less prone to losing/invalidating the encryption
+  // key when Android kills the process (the cause of "logged out after closing the app").
+  static const _storage = FlutterSecureStorage(
+    aOptions: AndroidOptions(encryptedSharedPreferences: true),
+  );
   static String? _accessToken;
   static String? _refreshToken;
 
@@ -73,12 +78,12 @@ class ApiService {
     try {
       _prefs ??= await SharedPreferences.getInstance();
 
-      // Secure storage can hang on some Android devices if KeyStore is corrupted or busy.
-      // We wrap it in a timeout and catch errors.
-      _accessToken = await _storage.read(key: 'access_token')
-          .timeout(const Duration(seconds: 3), onTimeout: () => null);
-      _refreshToken = await _storage.read(key: 'refresh_token')
-          .timeout(const Duration(seconds: 3), onTimeout: () => null);
+      // Secure storage can hang or throw on some Android devices if the KeyStore key was
+      // invalidated (e.g. after the OS kills the process). Read each key independently so
+      // a decrypt failure on one doesn't block the other, and treat failures as "no token"
+      // rather than letting the whole init() bail out.
+      _accessToken = await _readKeySafely('access_token');
+      _refreshToken = await _readKeySafely('refresh_token');
 
       _log('=== INIT DEBUG ===');
       _log('Access token exists: ${_accessToken != null}');
@@ -101,6 +106,17 @@ class ApiService {
       // If secure storage fails, we still proceed as unauthenticated
     } finally {
       _initCompleter!.complete();
+    }
+  }
+
+  /// Reads a single secure storage key, treating timeouts/decrypt errors as "missing"
+  /// instead of throwing — so a corrupted entry never gets mistaken for a deliberate logout.
+  static Future<String?> _readKeySafely(String key) async {
+    try {
+      return await _storage.read(key: key).timeout(const Duration(seconds: 3));
+    } catch (e) {
+      _log('Secure storage read failed for "$key": $e', isError: true);
+      return null;
     }
   }
   static Future<void> saveTokens(String access, String refresh) async {

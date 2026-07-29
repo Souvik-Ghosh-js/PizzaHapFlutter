@@ -1,5 +1,19 @@
 import 'package:flutter/foundation.dart';
 
+class StoreHours {
+  static const int openHour  = 10; // 10:00 AM IST
+  static const int closeHour = 22; // 10:00 PM IST
+
+  // Returns true if current IST time is between 10:00 AM and 10:00 PM.
+  static bool get isOpen {
+    final ist = DateTime.now().toUtc().add(const Duration(hours: 5, minutes: 30));
+    return ist.hour >= openHour && ist.hour < closeHour;
+  }
+
+  static String get opensAt => '10:00 AM';
+  static String get closesAt => '10:00 PM';
+}
+
 class AppConfig {
   static const String baseUrl = 'https://api.gobt.in/api';
   static const String imageBaseUrl = 'https://api.gobt.in'; 

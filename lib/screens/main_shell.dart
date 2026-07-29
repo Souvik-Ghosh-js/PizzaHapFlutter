@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/providers.dart';
 import '../config/app_config.dart';
+import '../widgets/store_closed_screen.dart';
 import 'home/home_screen.dart';
 import 'menu/menu_screen.dart';
 import 'cart/cart_screen.dart';
@@ -53,8 +54,20 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
     });
   }
 
-  void _checkAuth() {
+  void _checkAuth() async {
     final auth = context.read<AuthProvider>();
+    // AuthProvider may still be reading tokens from secure storage at this point
+    // (e.g. right after the app process is recreated). Wait for it to finish
+    // before deciding the user is logged out — otherwise a momentary false
+    // reading here wins the race and bounces a valid session to /login.
+    int waitMs = 0;
+    const maxWaitMs = 5000;
+    while (!auth.isInitialized && waitMs < maxWaitMs) {
+      await Future.delayed(const Duration(milliseconds: 100));
+      waitMs += 100;
+      if (!mounted) return;
+    }
+    if (!mounted) return;
     if (!auth.isLoggedIn) {
       Navigator.pushNamedAndRemoveUntil(context, '/login', (r) => false);
     }
@@ -79,8 +92,9 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
 
 
   void _onAuthChanged() {
+    if (!mounted) return;
     final auth = context.read<AuthProvider>();
-    if (auth.sessionExpired && mounted) {
+    if (auth.sessionExpired) {
       auth.resetSessionExpired();
       Navigator.pushNamedAndRemoveUntil(context, '/login', (r) => false);
     }
@@ -131,8 +145,12 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     final cart = context.watch<CartProvider>();
-    // Don't show floating cart when on the cart tab (index 2)
-    final showFloatingCart = cart.itemCount > 0 && _currentIndex != 2;
+    final storeClosed = !StoreHours.isOpen;
+    // Tabs 0/1/2 are ordering tabs — show closed screen when store is shut.
+    // Tabs 3 (Orders) and 4 (Profile) are always accessible.
+    final onOrderingTab = _currentIndex <= 2;
+    final showFloatingCart =
+        !storeClosed && cart.itemCount > 0 && _currentIndex != 2;
 
     return PopScope(
       canPop: false,
@@ -142,11 +160,12 @@ class _MainShellState extends State<MainShell> with TickerProviderStateMixin {
         if (shouldPop && context.mounted) Navigator.of(context).pop();
       },
       child: Scaffold(
-        body: IndexedStack(
-          index: _currentIndex,
-          children: _screens,
-        ),
-        // Floating cart button — shows on all tabs except cart tab when items in cart
+        body: (storeClosed && onOrderingTab)
+            ? const StoreClosedScreen()
+            : IndexedStack(
+                index: _currentIndex,
+                children: _screens,
+              ),
         floatingActionButton: showFloatingCart
             ? _FloatingCartButton(
                 itemCount: cart.itemCount,
