@@ -20,7 +20,6 @@ import 'screens/orders/order_detail_screen.dart';
 import 'screens/orders/order_confirm_screen.dart';
 import 'screens/orders/coins_screen.dart';
 import 'screens/support/support_screens.dart';
-import 'widgets/cors_banner.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -62,7 +61,6 @@ class PizzaHapApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       initialRoute: '/splash',
       onGenerateRoute: _generateRoute,
-      builder: (context, child) => WebCorsBanner(child: child!),
     ),
   );
 

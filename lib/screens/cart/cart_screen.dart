@@ -629,110 +629,271 @@ void showFreeItemExtrasSheet(BuildContext context, CartProvider cart) {
         return t;
       }
 
-      final crusts =
-          product.crusts.where((c) => c.isAvailable).toList();
-      final toppings =
-          product.toppings.where((t) => t.isAvailable).toList();
+      final crusts = product.crusts.where((c) => c.isAvailable).toList();
+      final toppings = product.toppings.where((t) => t.isAvailable).toList();
 
-      return SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(ctx).size.height * 0.75),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
+      return SizedBox(
+        height: MediaQuery.of(ctx).size.height * 0.8,
+        child: Column(
+          children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 12),
               child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                        'Extras for your FREE ${free.size.sizeName} ${product.name}',
-                        style: const TextStyle(
-                            fontWeight: FontWeight.w800, fontSize: 16)),
-                    const SizedBox(height: 4),
-                    Text(
-                        'The pizza itself is free — extras below are charged.',
-                        style: TextStyle(
-                            fontSize: 12, color: Colors.grey.shade600)),
-                  ]),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Extras for your FREE ${free.size.sizeName} ${product.name}',
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800, fontSize: 18, height: 1.2),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'The pizza itself is free — extras below are charged.',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
             ),
-            Flexible(
+            Expanded(
               child: ListView(
-                shrinkWrap: true,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                 children: [
                   if (crusts.isNotEmpty) ...[
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(12, 10, 12, 0),
-                      child: Text('Crust',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 13)),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12, top: 4),
+                      child: Row(
+                        children: [
+                          Icon(Icons.radio_button_checked,
+                              size: 20, color: Colors.grey.shade400),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Choose Crust',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: Color(0xFF1A1A1A),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    RadioListTile<int?>(
-                      dense: true,
-                      value: null,
-                      groupValue: crust?.id,
-                      onChanged: (_) => setSheet(() => crust = null),
-                      title: const Text('Regular crust (Free)',
-                          style: TextStyle(fontSize: 13)),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          _CrustChip(
+                            label: 'Regular crust (Free)',
+                            selected: crust == null,
+                            onTap: () => setSheet(() => crust = null),
+                          ),
+                          ...crusts.map((c) => _CrustChip(
+                            label:
+                                '${c.name} +₹${product.getCrustPrice(c, sizeCode).toStringAsFixed(0)}',
+                            selected: crust?.id == c.id,
+                            onTap: () => setSheet(() => crust = c),
+                          )),
+                        ],
+                      ),
                     ),
-                    ...crusts.map((c) => RadioListTile<int?>(
-                          dense: true,
-                          value: c.id,
-                          groupValue: crust?.id,
-                          onChanged: (_) => setSheet(() => crust = c),
-                          title: Text(
-                              '${c.name}  +₹${product.getCrustPrice(c, sizeCode).toStringAsFixed(0)}',
-                              style: const TextStyle(fontSize: 13)),
-                        )),
+                    const SizedBox(height: 20),
                   ],
                   if (toppings.isNotEmpty) ...[
-                    const Padding(
-                      padding: EdgeInsets.fromLTRB(12, 10, 12, 0),
-                      child: Text('Toppings',
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700, fontSize: 13)),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: [
+                          Icon(Icons.add_circle_outline,
+                              size: 20, color: Colors.grey.shade400),
+                          const SizedBox(width: 8),
+                          const Text(
+                            'Add Toppings',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 15,
+                              color: Color(0xFF1A1A1A),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    ...toppings.map((t) => CheckboxListTile(
-                          dense: true,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          value: selected.any((s) => s.id == t.id),
-                          onChanged: (v) => setSheet(() {
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: toppings.map((t) {
+                        final isSelected = selected.any((s) => s.id == t.id);
+                        return _ToppingChip(
+                          label:
+                              '${t.name} +₹${product.getToppingPrice(t, sizeCode).toStringAsFixed(0)}',
+                          selected: isSelected,
+                          isVeg: t.isVeg,
+                          onTap: () => setSheet(() {
                             selected.removeWhere((s) => s.id == t.id);
-                            if (v == true) selected.add(t);
+                            if (!isSelected) selected.add(t);
                           }),
-                          title: Text(
-                              '${t.name}  +₹${product.getToppingPrice(t, sizeCode).toStringAsFixed(0)}',
-                              style: const TextStyle(fontSize: 13)),
-                        )),
+                        );
+                      }).toList(),
+                    ),
                   ],
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
-              child: Row(children: [
-                Expanded(
-                  child: Text(
+            Container(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+              decoration: BoxDecoration(
+                border: Border(
+                  top: BorderSide(color: Colors.grey.shade200),
+                ),
+              ),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFCC1F1F),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onPressed: () {
+                        cart.setFreeItemExtras(crust, selected);
+                        Navigator.pop(ctx);
+                      },
+                      child: const Text(
+                        'Apply',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
                     extrasTotal() > 0
                         ? 'Extras: ₹${extrasTotal().toStringAsFixed(0)}'
-                        : 'No extras',
+                        : 'No extras selected',
                     style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 15),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: Color(0xFF666666),
+                    ),
+                    textAlign: TextAlign.center,
                   ),
-                ),
-                ElevatedButton(
-                  onPressed: () {
-                    cart.setFreeItemExtras(crust, selected);
-                    Navigator.pop(ctx);
-                  },
-                  child: const Text('Apply',
-                      style: TextStyle(fontWeight: FontWeight.w700)),
-                ),
-              ]),
+                ],
+              ),
             ),
-          ]),
+          ],
         ),
       );
     }),
   );
+}
+
+class _CrustChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _CrustChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          decoration: BoxDecoration(
+            color: selected ? const Color(0xFFCC1F1F) : Colors.white,
+            border: Border.all(
+              color: selected ? const Color(0xFFCC1F1F) : Colors.grey.shade300,
+              width: 1.5,
+            ),
+            borderRadius: BorderRadius.circular(24),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+              color: selected ? Colors.white : const Color(0xFF1A1A1A),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ToppingChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final bool isVeg;
+  final VoidCallback onTap;
+
+  const _ToppingChip({
+    required this.label,
+    required this.selected,
+    required this.isVeg,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? Colors.grey.shade100 : Colors.white,
+          border: Border.all(
+            color: selected ? Colors.grey.shade400 : Colors.grey.shade300,
+            width: 1.5,
+          ),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 16,
+              height: 16,
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: isVeg ? const Color(0xFF27AE60) : const Color(0xFFCC1F1F),
+                  width: 2,
+                ),
+                borderRadius: BorderRadius.circular(3),
+              ),
+              child: selected
+                  ? Icon(Icons.check,
+                      size: 12,
+                      color:
+                          isVeg ? const Color(0xFF27AE60) : const Color(0xFFCC1F1F))
+                  : null,
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 13,
+                  color: Color(0xFF1A1A1A),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
