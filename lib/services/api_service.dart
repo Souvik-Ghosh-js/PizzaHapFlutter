@@ -521,11 +521,17 @@ class ApiService {
     return (body['data'] as List).map((c) => Coupon.fromJson(c)).toList();
   });
 
-  static Future<Coupon> validateCoupon(String code, double orderValue) => _safeRequest(() async {
+  static Future<Coupon> validateCoupon(String code, double orderValue,
+      {List<Map<String, dynamic>>? items}) => _safeRequest(() async {
     final response = await http.post(
       Uri.parse('${AppConfig.baseUrl}${AppStrings.validateCoupon}'),
       headers: _headers,
-      body: jsonEncode({'code': code, 'order_value': orderValue}),
+      body: jsonEncode({
+        'code': code,
+        'order_value': orderValue,
+        // Lets the server enforce BOGO product/size eligibility at apply time
+        if (items != null && items.isNotEmpty) 'items': items,
+      }),
     ).timeout(AppConfig.connectTimeout);
     final body = await _handleResponse(response);
     return Coupon.fromJson(body['data']);

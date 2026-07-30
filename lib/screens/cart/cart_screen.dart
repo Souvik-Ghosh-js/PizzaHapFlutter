@@ -45,7 +45,13 @@ class _CartScreenState extends State<CartScreen>
     setState(() => _validatingCoupon = true);
     try {
       final coupon = await ApiService.validateCoupon(
-          _couponCtrl.text.trim(), cart.subtotal);
+          _couponCtrl.text.trim(), cart.subtotal,
+          items: cart.items
+              .map((i) => {
+                    'product_id': i.product.id,
+                    'size_code': i.size.sizeCode,
+                  })
+              .toList());
       if (!mounted) return;
       cart.applyCoupon(coupon);
       if (coupon.isBogo) {
