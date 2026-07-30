@@ -528,20 +528,32 @@ class ApiService {
 
   // ─── COUPONS ────────────────────────────────────────────────────────
 
-  static Future<List<Coupon>> getCoupons() => _safeRequest(() async {
+  static Future<List<Coupon>> getCoupons({List<int>? cartProductIds}) =>
+      _safeRequest(() async {
+    // Sending the cart's product ids lets the server hide product-restricted
+    // BOGO coupons that match nothing in the cart
+    final query = (cartProductIds != null && cartProductIds.isNotEmpty)
+        ? '?product_ids=${cartProductIds.join(',')}'
+        : '';
     final response = await http.get(
-      Uri.parse('${AppConfig.baseUrl}${AppStrings.coupons}'),
+      Uri.parse('${AppConfig.baseUrl}${AppStrings.coupons}$query'),
       headers: _headers,
     ).timeout(AppConfig.connectTimeout);
     final body = await _handleResponse(response);
     return (body['data'] as List).map((c) => Coupon.fromJson(c)).toList();
   });
 
-  static Future<Coupon> validateCoupon(String code, double orderValue) => _safeRequest(() async {
+  static Future<Coupon> validateCoupon(String code, double orderValue,
+      {List<Map<String, dynamic>>? items}) => _safeRequest(() async {
     final response = await http.post(
       Uri.parse('${AppConfig.baseUrl}${AppStrings.validateCoupon}'),
       headers: _headers,
-      body: jsonEncode({'code': code, 'order_value': orderValue}),
+      body: jsonEncode({
+        'code': code,
+        'order_value': orderValue,
+        // Lets the server enforce BOGO product/size eligibility at apply time
+        if (items != null && items.isNotEmpty) 'items': items,
+      }),
     ).timeout(AppConfig.connectTimeout);
     final body = await _handleResponse(response);
     return Coupon.fromJson(body['data']);

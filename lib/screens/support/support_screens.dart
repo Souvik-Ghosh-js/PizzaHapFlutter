@@ -177,7 +177,12 @@ class _CouponsScreenState extends State<CouponsScreen> {
 
   Future<void> _load() async {
     try {
-      _coupons = await ApiService.getCoupons();
+      // Pass the cart's products so the server hides product-restricted
+      // BOGO coupons that don't match anything in the cart
+      final cart = context.read<CartProvider>();
+      _coupons = await ApiService.getCoupons(
+          cartProductIds:
+              cart.items.map((i) => i.product.id).toSet().toList());
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
