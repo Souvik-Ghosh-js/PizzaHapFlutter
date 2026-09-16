@@ -245,30 +245,36 @@ class ApiService {
 
   // ─── AUTH ─────────────────────────────────────────────────────────
 
-  static Future<void> sendOtp(String email) => _safeRequest(() async {
+  static Future<void> sendOtp(String mobile) => _safeRequest(() async {
     final response = await http.post(
       Uri.parse('${AppConfig.baseUrl}${AppStrings.sendOtp}'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email}),
+      body: jsonEncode({'mobile': mobile}),
     ).timeout(AppConfig.connectTimeout);
     await _handleResponse(response);
   });
 
-  static Future<void> resendOtp(String email) => _safeRequest(() async {
+  static Future<void> resendOtp(String mobile) => _safeRequest(() async {
     final response = await http.post(
       Uri.parse('${AppConfig.baseUrl}${AppStrings.resendOtp}'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email}),
+      body: jsonEncode({'mobile': mobile}),
     ).timeout(AppConfig.connectTimeout);
     await _handleResponse(response);
   });
 
-  static Future<AuthResponse> register(String name, String email, String otp, {String? mobile}) =>
+  // Login is by mobile + OTP; email is required at signup for order emails.
+  static Future<AuthResponse> register(String name, String mobile, String otp, String email) =>
       _safeRequest(() async {
     final response = await http.post(
       Uri.parse('${AppConfig.baseUrl}${AppStrings.register}'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'name': name, 'email': email, 'otp': otp, if (mobile != null) 'mobile': mobile}),
+      body: jsonEncode({
+        'name': name,
+        'mobile': mobile,
+        'otp': otp,
+        'email': email,
+      }),
     ).timeout(AppConfig.connectTimeout);
     final body = await _handleResponse(response);
     final auth = AuthResponse.fromJson(body['data']);
@@ -276,11 +282,11 @@ class ApiService {
     return auth;
   });
 
-  static Future<AuthResponse> login(String email, String otp) => _safeRequest(() async {
+  static Future<AuthResponse> login(String mobile, String otp) => _safeRequest(() async {
     final response = await http.post(
       Uri.parse('${AppConfig.baseUrl}${AppStrings.login}'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'otp': otp}),
+      body: jsonEncode({'mobile': mobile, 'otp': otp}),
     ).timeout(AppConfig.connectTimeout);
     final body = await _handleResponse(response);
     final auth = AuthResponse.fromJson(body['data']);

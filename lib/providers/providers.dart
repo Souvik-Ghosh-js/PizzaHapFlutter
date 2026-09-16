@@ -77,10 +77,10 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
     print('=== AUTH PROVIDER INIT COMPLETE ===');
   }
-  Future<bool> sendOtp(String email) async {
+  Future<bool> sendOtp(String mobile) async {
     _loading = true; _error = null; notifyListeners();
     try {
-      await ApiService.sendOtp(email);
+      await ApiService.sendOtp(mobile);
       return true;
     } on ApiException catch (e) {
       _error = e.message; return false;
@@ -89,19 +89,19 @@ class AuthProvider extends ChangeNotifier {
     } finally { _loading = false; notifyListeners(); }
   }
 
-  Future<bool> resendOtp(String email) async {
+  Future<bool> resendOtp(String mobile) async {
     try {
-      await ApiService.resendOtp(email);
+      await ApiService.resendOtp(mobile);
       return true;
     } on ApiException catch (e) {
       _error = e.message; return false;
     }
   }
 
-  Future<bool> login(String email, String otp) async {
+  Future<bool> login(String mobile, String otp) async {
     _loading = true; _error = null; notifyListeners();
     try {
-      final auth = await ApiService.login(email, otp);
+      final auth = await ApiService.login(mobile, otp);
       _user = auth.user;
       return true;
     } on ApiException catch (e) {
@@ -111,10 +111,10 @@ class AuthProvider extends ChangeNotifier {
     } finally { _loading = false; notifyListeners(); }
   }
 
-  Future<bool> register(String name, String email, String otp, {String? mobile}) async {
+  Future<bool> register(String name, String mobile, String otp, String email) async {
     _loading = true; _error = null; notifyListeners();
     try {
-      final auth = await ApiService.register(name, email, otp, mobile: mobile);
+      final auth = await ApiService.register(name, mobile, otp, email);
       _user = auth.user;
       return true;
     } on ApiException catch (e) {

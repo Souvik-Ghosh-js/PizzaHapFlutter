@@ -14,12 +14,12 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin {
-  final _emailCtrl = TextEditingController();
+  final _mobileCtrl = TextEditingController();
   final _otpCtrl = TextEditingController();
   bool _otpSent = false;
   bool _sending = false;
   bool _verifying = false;
-  String? _emailError;
+  String? _mobileError;
   int _resendSeconds = 0;
 
   late AnimationController _fadeCtrl;
@@ -41,7 +41,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
+    _mobileCtrl.dispose();
     _otpCtrl.dispose();
     _fadeCtrl.dispose();
     _slideCtrl.dispose();
@@ -55,19 +55,19 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     _slideCtrl.forward();
   }
 
-  bool _isValidEmail(String e) =>
-      RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(e.trim());
+  bool _isValidMobile(String m) =>
+      RegExp(r'^[6-9]\d{9}$').hasMatch(m.trim());
 
   Future<void> _sendOtp() async {
-    setState(() => _emailError = null);
-    if (!_isValidEmail(_emailCtrl.text)) {
-      setState(() => _emailError = 'Enter a valid email address');
+    setState(() => _mobileError = null);
+    if (!_isValidMobile(_mobileCtrl.text)) {
+      setState(() => _mobileError = 'Enter a valid 10-digit mobile number');
       return;
     }
     setState(() => _sending = true);
     AppLoader.show(context, message: 'Sending OTP...');
     final auth = context.read<AuthProvider>();
-    final ok = await auth.sendOtp(_emailCtrl.text.trim());
+    final ok = await auth.sendOtp(_mobileCtrl.text.trim());
     AppLoader.hide();
     if (!mounted) return;
     setState(() => _sending = false);
@@ -75,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       setState(() { _otpSent = true; });
       _animateIn();
       _startResendTimer();
-      AppToast.success(context, 'OTP sent! Check your inbox');
+      AppToast.success(context, 'OTP sent to your mobile');
     } else {
       AppToast.error(context, auth.error ?? 'Failed to send OTP');
     }
@@ -99,7 +99,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     setState(() => _verifying = true);
     AppLoader.show(context, message: 'Verifying...');
     final auth = context.read<AuthProvider>();
-    final ok = await auth.login(_emailCtrl.text.trim(), _otpCtrl.text.trim());
+    final ok = await auth.login(_mobileCtrl.text.trim(), _otpCtrl.text.trim());
     AppLoader.hide();
     if (!mounted) return;
     setState(() => _verifying = false);
@@ -115,7 +115,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       if (err.toLowerCase().contains('not found') ||
           err.toLowerCase().contains('not registered')) {
         Navigator.pushReplacementNamed(context, '/register',
-            arguments: {'email': _emailCtrl.text.trim(), 'otp': _otpCtrl.text.trim()});
+            arguments: {'mobile': _mobileCtrl.text.trim(), 'otp': _otpCtrl.text.trim()});
       } else {
         AppToast.error(context, err.isNotEmpty ? err : 'Invalid OTP');
       }
@@ -246,7 +246,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                                 ),
                               ],
                             ),
-                            child: _otpSent ? _buildOtpStep() : _buildEmailStep(),
+                            child: _otpSent ? _buildOtpStep() : _buildMobileStep(),
                           ),
                           const SizedBox(height: 28),
                           // Sign up link
@@ -292,7 +292,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     ),);
   }
 
-  Widget _buildEmailStep() {
+  Widget _buildMobileStep() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -303,16 +303,21 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
         Text('Sign in to continue ordering',
             style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
         const SizedBox(height: 28),
-        // Email field
+        // Mobile field
         TextField(
-          controller: _emailCtrl,
-          keyboardType: TextInputType.emailAddress,
+          controller: _mobileCtrl,
+          keyboardType: TextInputType.phone,
           textInputAction: TextInputAction.done,
           onSubmitted: (_) => _sendOtp(),
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(10),
+          ],
           style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           decoration: InputDecoration(
-            labelText: 'Email Address',
-            hintText: 'you@example.com',
+            labelText: 'Mobile Number',
+            hintText: '9876543210',
+            prefixText: '+91  ',
             prefixIcon: Container(
               margin: const EdgeInsets.all(10),
               width: 38, height: 38,
@@ -320,10 +325,10 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                 color: const Color(AppColors.primary).withValues(alpha: 0.1),
                 borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.email_outlined,
+              child: const Icon(Icons.phone_outlined,
                   size: 18, color: Color(AppColors.primary)),
             ),
-            errorText: _emailError,
+            errorText: _mobileError,
           ),
         ),
         const SizedBox(height: 24),
@@ -361,7 +366,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('Verify your email',
+        const Text('Verify your mobile',
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900,
                 color: Color(AppColors.textPrimary))),
         const SizedBox(height: 4),
@@ -371,7 +376,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             children: [
               const TextSpan(text: 'Code sent to '),
               TextSpan(
-                text: _emailCtrl.text.trim(),
+                text: '+91 ${_mobileCtrl.text.trim()}',
                 style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     color: Color(AppColors.textPrimary)),
@@ -469,7 +474,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
             TextButton(
               onPressed: _sending || _resendSeconds > 0 ? null : () async {
                 final auth = context.read<AuthProvider>();
-                await auth.resendOtp(_emailCtrl.text.trim());
+                await auth.resendOtp(_mobileCtrl.text.trim());
                 if (mounted) {
                   AppToast.success(context, 'OTP resent!');
                   _startResendTimer();

@@ -21,10 +21,11 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
   final _mobileCtrl = TextEditingController();
   final _otpCtrl    = TextEditingController();
   final _nameFocus  = FocusNode();
-  final _emailFocus = FocusNode();
+  final _mobileFocus = FocusNode();
 
   String? _nameError;
   String? _emailError;
+  String? _mobileError;
   bool _loading = false;
   int _resendSeconds = 0;
 
@@ -44,7 +45,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final args = ModalRoute.of(context)?.settings.arguments;
       if (args is Map) {
-        _emailCtrl.text = args['email'] ?? '';
+        _mobileCtrl.text = args['mobile'] ?? '';
         if (args['otp'] != null) _otpCtrl.text = args['otp'];
       }
     });
@@ -54,7 +55,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
   void dispose() {
     _nameCtrl.dispose(); _emailCtrl.dispose();
     _mobileCtrl.dispose(); _otpCtrl.dispose();
-    _nameFocus.dispose(); _emailFocus.dispose();
+    _nameFocus.dispose(); _mobileFocus.dispose();
     _pageCtrl.dispose();
     super.dispose();
   }
@@ -76,14 +77,25 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
       }
       setState(() { _nameError = null; _step = 1; });
       _animateNextStep();
-      Future.delayed(const Duration(milliseconds: 200), () => _emailFocus.requestFocus());
+      Future.delayed(const Duration(milliseconds: 200), () => _mobileFocus.requestFocus());
     } else if (_step == 1) {
-      final email = _emailCtrl.text.trim();
-      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
-        setState(() => _emailError = 'Enter a valid email address');
+      final mobile = _mobileCtrl.text.trim();
+      if (!RegExp(r'^[6-9]\d{9}$').hasMatch(mobile)) {
+        setState(() => _mobileError = 'Enter a valid 10-digit mobile number');
         return;
       }
-      setState(() => _emailError = null);
+      // Email is required — order confirmations are sent there.
+      final email = _emailCtrl.text.trim();
+      if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+        setState(() {
+          _mobileError = null;
+          _emailError = email.isEmpty
+              ? 'Email is required for order updates'
+              : 'Enter a valid email address';
+        });
+        return;
+      }
+      setState(() { _mobileError = null; _emailError = null; });
       _sendOtp();
     }
   }
@@ -111,7 +123,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
     setState(() => _loading = true);
     AppLoader.show(context, message: 'Sending OTP...');
     final auth = context.read<AuthProvider>();
-    final ok = await auth.sendOtp(_emailCtrl.text.trim());
+    final ok = await auth.sendOtp(_mobileCtrl.text.trim());
     AppLoader.hide();
     if (!mounted) return;
     setState(() => _loading = false);
@@ -119,7 +131,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
       setState(() => _step = 2);
       _animateNextStep();
       _startResendTimer();
-      AppToast.success(context, 'OTP sent! Check your inbox');
+      AppToast.success(context, 'OTP sent to your mobile');
     } else {
       AppToast.error(context, auth.error ?? 'Failed to send OTP');
     }
@@ -131,9 +143,9 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
     final auth = context.read<AuthProvider>();
     final ok = await auth.register(
       _nameCtrl.text.trim(),
-      _emailCtrl.text.trim(),
+      _mobileCtrl.text.trim(),
       otp,
-      mobile: _mobileCtrl.text.trim().isEmpty ? null : _mobileCtrl.text.trim(),
+      _emailCtrl.text.trim(),
     );
     AppLoader.hide();
     if (!mounted) return;
@@ -271,7 +283,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
                                 _StepIndicator(step: _step, total: 3),
                                 const SizedBox(height: 22),
                                 if (_step == 0) _buildNameStep(),
-                                if (_step == 1) _buildEmailStep(),
+                                if (_step == 1) _buildMobileStep(),
                                 if (_step == 2) _buildOtpStep(),
                               ],
                             ),
@@ -344,43 +356,45 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
     ],
   );
 
-  // ─── STEP 1: Email + Mobile ─────────────────────────────────────
-  Widget _buildEmailStep() => Column(
+  // ─── STEP 1: Mobile + Email ─────────────────────────────────────
+  Widget _buildMobileStep() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text('Hi ${_nameCtrl.text.trim().split(' ').first}!',
           style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w900,
               color: Color(AppColors.textPrimary))),
       const SizedBox(height: 4),
-      Text('Enter your email to get started',
+      Text('We\'ll verify your mobile and email you order updates',
           style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
       const SizedBox(height: 24),
       TextField(
-        controller: _emailCtrl,
-        focusNode: _emailFocus,
-        keyboardType: TextInputType.emailAddress,
+        controller: _mobileCtrl,
+        focusNode: _mobileFocus,
+        keyboardType: TextInputType.phone,
         textInputAction: TextInputAction.next,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
-          labelText: 'Email Address',
-          hintText: 'you@example.com',
-          prefixIcon: _prefixIcon(Icons.email_outlined),
-          errorText: _emailError,
+          labelText: 'Mobile Number',
+          hintText: '9876543210',
+          prefixIcon: _prefixIcon(Icons.phone_outlined),
+          prefixText: '+91  ',
+          errorText: _mobileError,
         ),
       ),
       const SizedBox(height: 14),
       TextField(
-        controller: _mobileCtrl,
-        keyboardType: TextInputType.phone,
+        controller: _emailCtrl,
+        keyboardType: TextInputType.emailAddress,
         textInputAction: TextInputAction.done,
         onSubmitted: (_) => _nextStep(),
-        inputFormatters: [FilteringTextInputFormatter.digitsOnly, LengthLimitingTextInputFormatter(10)],
         style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
         decoration: InputDecoration(
-          labelText: 'Mobile Number (optional)',
-          hintText: '9876543210',
-          prefixIcon: _prefixIcon(Icons.phone_outlined),
-          prefixText: '+91  ',
+          labelText: 'Email Address',
+          hintText: 'you@example.com',
+          helperText: 'Order confirmations are sent here',
+          prefixIcon: _prefixIcon(Icons.email_outlined),
+          errorText: _emailError,
         ),
       ),
       const SizedBox(height: 24),
@@ -392,7 +406,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
   Widget _buildOtpStep() => Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      const Text('Verify your email',
+      const Text('Verify your mobile',
           style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900,
               color: Color(AppColors.textPrimary))),
       const SizedBox(height: 4),
@@ -402,7 +416,7 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
           children: [
             const TextSpan(text: 'Code sent to '),
             TextSpan(
-              text: _emailCtrl.text.trim(),
+              text: '+91 ${_mobileCtrl.text.trim()}',
               style: const TextStyle(fontWeight: FontWeight.w700,
                   color: Color(AppColors.textPrimary)),
             ),
