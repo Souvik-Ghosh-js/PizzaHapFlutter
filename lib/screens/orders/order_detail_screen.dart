@@ -7,6 +7,7 @@ import '../../widgets/feedback_dialog.dart';
 import '../../services/api_service.dart';
 import '../../widgets/widgets.dart';
 import '../../models/models.dart';
+import '../cart/payment_webview.dart';
 
 class OrderDetailScreen extends StatefulWidget {
   final int orderId;
@@ -70,6 +71,46 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
     } catch (e) {
       if (!mounted) return;
       AppToast.error(context, 'Failed to reorder');
+    }
+  }
+
+  bool _payingOnline = false;
+
+  Future<void> _payOnline(Order order) async {
+    setState(() => _payingOnline = true);
+    AppLoader.show(context, message: 'Preparing payment...');
+    try {
+      final dynamic payResult = await ApiService.initiateCodOrderPayment(order.id);
+      AppLoader.hide();
+      if (!mounted) return;
+      setState(() => _payingOnline = false);
+
+      if (payResult is Map && payResult.containsKey('payu_params')) {
+        final params = Map<String, dynamic>.from(payResult['payu_params']);
+        final txnid = payResult['txnid'] as String;
+
+        final paymentResult = await Navigator.push<Map<String, dynamic>>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => PaymentWebView(payuParams: params, txnid: txnid),
+          ),
+        );
+        if (!mounted) return;
+
+        if (paymentResult != null && paymentResult['status'] == 'success') {
+          AppToast.success(context, 'Payment successful! No need to pay cash on delivery.');
+          await context.read<OrderProvider>().loadOrder(order.id);
+        } else {
+          AppToast.error(context, 'Payment was not completed');
+        }
+      } else {
+        AppToast.error(context, 'Could not start payment');
+      }
+    } catch (e) {
+      AppLoader.hide();
+      if (!mounted) return;
+      setState(() => _payingOnline = false);
+      AppToast.error(context, 'Could not start payment');
     }
   }
 
@@ -230,6 +271,28 @@ class _OrderDetailScreenState extends State<OrderDetailScreen> {
                         ),
                       ),
                     ]),
+                    if (order.canPayOnline) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        height: 40,
+                        child: OutlinedButton.icon(
+                          onPressed: _payingOnline ? null : () => _payOnline(order),
+                          icon: _payingOnline
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(strokeWidth: 2))
+                              : const Icon(Icons.credit_card_outlined, size: 18),
+                          label: Text(_payingOnline ? 'Please wait...' : 'Pay Online Instead'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(AppColors.primary),
+                            side: BorderSide(color: const Color(AppColors.primary).withValues(alpha: 0.4)),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                          ),
+                        ),
+                      ),
+                    ],
                     if (!isCancelled) ...[
                       const SizedBox(height: 20),
                       ...List.generate(_statusSteps.length, (i) {

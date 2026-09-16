@@ -591,6 +591,18 @@ class ApiService {
     return body['data'];
   });
 
+  /// Pay online for an already-placed cash-on-delivery order (any time
+  /// before it's delivered or cancelled). Returns PayU params the same
+  /// shape as initiateOnlinePayment, for use with PaymentWebView.
+  static Future<dynamic> initiateCodOrderPayment(int orderId) => _safeRequest(() async {
+    final response = await http.post(
+      Uri.parse('${AppConfig.baseUrl}/payments/cod-orders/$orderId/pay'),
+      headers: _headers,
+    ).timeout(AppConfig.connectTimeout);
+    final body = await _handleResponse(response);
+    return body['data'];
+  });
+
   // ─── NOTIFICATIONS ──────────────────────────────────────────────────
 
   static Future<Map<String, dynamic>> getNotifications() => _safeRequest(() async {

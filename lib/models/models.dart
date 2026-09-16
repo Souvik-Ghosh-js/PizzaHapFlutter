@@ -674,6 +674,9 @@ class Order {
   bool get isDelivered => status == 'delivered';
   bool get isCOD => paymentMethod == 'cash_on_delivery';
   bool get isPaid => paymentStatus == 'paid';
+  // COD orders can switch to online payment any time before delivery/cancellation.
+  bool get canPayOnline =>
+      isCOD && !isPaid && status != 'delivered' && status != 'cancelled';
 }
 
 // ─── COINS MODELS ─────────────────────────────────────────────────
