@@ -59,6 +59,11 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
       RegExp(r'^[6-9]\d{9}$').hasMatch(m.trim());
 
   Future<void> _sendOtp() async {
+    // Guard at entry, not just on the button: the keyboard's "Done"/submit
+    // action and a near-simultaneous tap on "Get OTP" can both call this
+    // before the first setState(_sending=true) has committed, sending two
+    // OTPs for one request.
+    if (_sending) return;
     setState(() => _mobileError = null);
     if (!_isValidMobile(_mobileCtrl.text)) {
       setState(() => _mobileError = 'Enter a valid 10-digit mobile number');

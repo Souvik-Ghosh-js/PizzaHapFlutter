@@ -120,6 +120,10 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
   }
 
   Future<void> _sendOtp() async {
+    // Guard at entry — see the matching comment in login_screen.dart's
+    // _sendOtp: a keyboard submit action and a near-simultaneous button tap
+    // can both reach here before the first setState(_loading=true) commits.
+    if (_loading) return;
     setState(() => _loading = true);
     AppLoader.show(context, message: 'Sending OTP...');
     final auth = context.read<AuthProvider>();
